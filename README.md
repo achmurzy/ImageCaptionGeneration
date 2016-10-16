@@ -1,6 +1,8 @@
 # ImageCaptionGeneration
 
 # We use a pre-trained model and provided lua script to receive data
+# Make sure densecap is installed correctly along with torch following
+# directions at  https://github.com/myfavouritekk/densecap/blob/master/README.md
 
 # This repository must be next to 'densecap' git clone in a directory. 
 # Put an image dataset in 'images' (musicians provided), should be small (less than 5 images) 
@@ -14,6 +16,8 @@
 
 # I wrote code that extracts stuff we need from the JSON string, and a method that takes a
 # Saliency algorithm to determine which phrases are important. We can start with this.
+
+# To run the code:   python caption_generation.py
 
 # Next steps: 
 #   -Input format
