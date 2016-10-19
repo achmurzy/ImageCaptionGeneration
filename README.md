@@ -4,6 +4,14 @@
 # Make sure densecap is installed correctly along with torch following
 # directions at  https://github.com/myfavouritekk/densecap/blob/master/README.md
 
+# The code depends on the cocopy MS-COCO Python API: https://github.com/pdollar/coco
+# Follow the instructions there for installation and make sure to put the installation folder
+# on your PYTHONPATH.
+
+# Get MS-COCO data here : http://mscoco.org/dataset/#download
+# The repo also assumes the /images is filled with the MS-COCO 2014 training set of images
+# /annotations should contain the file "captions_train2014.json" 
+
 # This repository must be next to 'densecap' git clone in a directory. 
 # Put an image dataset in 'images' (musicians provided), should be small (less than 5 images) 
 # In root of 'densecap' run 'sh scripts/download_pretrained_model.sh'
