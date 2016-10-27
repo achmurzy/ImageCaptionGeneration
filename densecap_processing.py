@@ -12,6 +12,9 @@ import os
 annFile = 'annotations/captions_train2014.json'
 coco = COCO(annFile)
 
+START = '\''
+STOP = '.'
+
 #Get some number of imgIDs from MS-COCO
 def get_coco_imgs(number):
     imgIDs = sorted(coco.getImgIds())
@@ -46,6 +49,38 @@ def coco_to_captions(imgIDs):
     numAnnIDs = coco.getAnnIds(imgIDs)
     return coco.loadAnns(numAnnIDs)
 
+#Returns a single caption associated with each image from the set of annotations
+#images have multiple captions which we may be able to take advantage of later
+#We also add <START> and <STOP> symbols - we use escaped characters \' and \" respectively
+def get_coco_captions(_captions):
+    capDict = {}
+    for x in _captions:
+        if not x['image_id'] in capDict:
+            capDict[x['image_id']] = START + x['caption']
+    return capDict
+
+#Returns a sorted list of unique words from the set of annotations
+def get_coco_lexicon(_captions):
+    words = []
+    for x in _captions:
+        for word in x['caption'].split():
+            words.append(word)
+    return sorted(set(words))
+
+#Build 2-way lookup tables for encoding and decoding word representations in our neural net
+def build_lookup_lexicon(_lexicon, index2word, word2index):
+    count = 0;
+    for x in _lexicon:
+        index2word[count] = x
+        word2index[x] = count
+        count = count + 1
+    # Add special symbols
+    index2word[count] = START
+    word2index[START] = count
+    count = count + 1
+    index2word[count] = STOP
+    word2index[STOP] = count
+
 #Used to retrieve densecap processing results
 #Takes a path to _json filename. Should be "results/results.json" in the local directory.
 def json_to_dict(_json):
@@ -59,6 +94,8 @@ def dict_to_imgs(_result):
     count = 0
     for img in _result['results']:
         images[count] = img
+        count = count + 1
+    print "Counted %s images" % count
     return images
 
 #takes image info to get various fields

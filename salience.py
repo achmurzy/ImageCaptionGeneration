@@ -1,9 +1,11 @@
+import densecap_processing as dp
+
 #Takes a saliency function to return training phrases for a given image
 #Our network architecture may not require a fixed number of target phrases
-def salient_phrases(image, saliency):
+def salient_phrases(images, index, saliency):
     phrases = [] 
-    for index in saliency():
-        phrases.append(image['captions'][index])
+    for dex in saliency():
+        phrases.append(dp.get_captions(images, index)[dex])
     return phrases
 
 ## Saliency Methods ## 
