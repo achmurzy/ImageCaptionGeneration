@@ -15,6 +15,7 @@ import densecap_processing as dp
 import tensorflow as tf
 from tensorflow.python.ops import rnn, rnn_cell
 import numpy as np
+from nltk import bleu_score
 import code
 
 # To make input, we need to create a tensor
@@ -33,7 +34,7 @@ class NetworkInput(object):
     def captions(self):
         return self.inputs[1]
 
-    def __init__(self, phraseDim, wordDim, inputs, batchSize, epochSize, trainingIterations):
+    def __init__(self, batchSize, phraseDim, wordDim, inputs, epochSize, trainingIterations):
         self.phrase_dimension = phraseDim
         self.word_dimension = wordDim
         self.inputs = inputs
@@ -83,6 +84,10 @@ class LSTMNet(object):
         return self._final_state
 
     @property
+    def probabilities(self):
+        return self._probs
+
+    @property
     def optimizer(self):
         return self._optimizer
 
@@ -109,13 +114,18 @@ class LSTMNet(object):
 
         # tf Graph input - placeholders must be fed training data on execution
         # 'None' as a dimension allows that dimension to be any length
-        self.placeholder_x = tf.placeholder(
-            "float", [inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension])
-        self.placeholder_y = tf.placeholder("float", [None, inputs.word_dimension])
+        self.placeholder_x = tf.placeholder(params.data_type, 
+                        [inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension])
+        #self.placeholder_y = tf.placeholder(params.data_type, 
+        #                    [inputs.batch_size, inputs.word_dimension])
+        self.placeholder_y = tf.placeholder(params.data_type, 
+                            [inputs.phrase_dimension, inputs.word_dimension])
+        #self.placeholder_y = tf.placeholder(tf.int32, 
+        #                    [inputs.batch_size, inputs.word_dimension])
+        
         x = tf.reshape(self._x, [-1, inputs.word_dimension])
         x = tf.split(0, inputs.batch_size, x)
         print (x)
-    
         # Define an lstm cell with tensorflow
         lstm_cell = rnn_cell.BasicLSTMCell(
             params.layer_size, forget_bias=1.0, state_is_tuple=True)
@@ -123,25 +133,47 @@ class LSTMNet(object):
         
         # Save a snapshot of the initial state for generating sequences later
         self._initial_state = layer_cell.zero_state(inputs.phrase_dimension, params.data_type)
-        print (self._initial_state)
-        #code.interact(local=dict(globals(), **locals()))
-        # Get lstm cell output - Use input split placeholder (sequence) and cell architecture
+        
         outputs, state = rnn.rnn(
             layer_cell, x, initial_state = self._initial_state, dtype=params.data_type)
     
-        #Not sure about this one
+        #Used as recurrent input to LSTM layers during sequence generation
+        #Represents (c, h) values for params.num_layer of stacked LSTM cells
+        #(Given as 'unrolled' representation) - Also used as input to model by determining
+        # value of outputs[-1] - therefore directly used to compute probabilities
         self._final_state = state
     
-        # Define weights - will generalize weight/bias function (softmax, etc.) later
+        # Define weights according to dimensionality of hidden layers
         weights = {
             'out': tf.Variable(tf.random_normal([params.layer_size, inputs.word_dimension]))}
         biases = {'out': tf.Variable(tf.random_normal([inputs.word_dimension]))}
 
-        #outputs [-1] represents the final cell in the LSTM block
-        #'logits' - discrete logistic regression
+        #outputs [-1] represents the final cell in the LSTM block, given as batch_size
+        #of tensors for handling output
+        #Output in LSTM is a function of the cell state (c) and the hidden state (h)
+        #See LSTMStateTuple output of rnn_cell.BasicLSTMCell (state)
+        
+        #This represents the model we apply to the LSTM cell layer
+        #This reconciles the dimensionality of hidden features (layer_size) and LSTM states
+        #with dimensionality of our sequence (phrase_dim, word_dim)
+        #Returns sequence predictions - These values are used for classification
         self._model =  tf.matmul(outputs[-1], weights['out']) + biases['out']
-
+        
+        #self.probabilities is the final layer of the network
+        #squash all predictions into range 0->1 for sane inference 
+        self._probs = tf.nn.softmax(self._model)
+        
+        #self._cost will become a custom machine translation heuristic and other things yo
         self._cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(self._model, self._y))
+        logits = tf.split(0, inputs.batch_size, tf.reshape(
+                        self._x, [inputs.batch_size, -1]))
+        targets = [self._y] * inputs.batch_size
+        weights = [tf.ones(self.inputs.batch_size * inputs.word_dimension, 
+             dtype=params.data_type)] * inputs.batch_size
+        #code.interact(local=dict(globals(), **locals()))
+        #self._cost = tf.reduce_mean(tf.nn.seq2seq.sequence_loss(logits,targets,weights))
+        
+        #I don't know what this does. Some variant of backpropagation
         self._optimizer = tf.train.AdamOptimizer(
             learning_rate=params.learning_rate).minimize(self._cost)
 
@@ -158,190 +190,42 @@ class LSTMNet(object):
             for step in range(self.inputs.training_iterations):
                 train_dict = {self._x: self.inputs.phrases, 
                                       self._y: self.inputs.captions}
-                #code.interact(local=dict(globals(), **locals()))
+                
                 vals = session.run(fetches, train_dict)
+                """Equivalent to:                         Against input x, y (phrases, captions)
+                session.run(self.final_state, train_dict) Compute distribution -- get caption
+                session.run(self.cost, train_dict)        Calculate loss
+                session.run(self.optimizer, train_dict)   Update weights by backpropagation
+                """
                 cost = vals["cost"]
                 state = vals["final_state"]
-                probs = session.run(self.model, train_dict)
-                print(self.sample(probs))
+                
+                self.sample(session)
                 costs += cost
 
         return np.exp(costs)
 
-    def sample(self, probabilities):
-        gen = []
-        cap = ""
-        for prob in probabilities:
-            ind = np.argmax(prob)
-            gen.append(ind)
-            cap += self.decoder[ind]
-        return cap
-
-def MakePlaceholderTensors(phraseCount, phraseLength, wordCount):
-    # tf Graph input - placeholders must be fed training data on execution
-    # 'None' as a dimension allows that dimension to be any length    Can we use an arbitraty
-    # x = tf.placeholder("float", [None, phraseLength, wordCount])    number of phrases this way?
-    x = tf.placeholder("float", [phraseCount, phraseLength, wordCount])
-
-    # Are we forced to define fixed-length captions to provide training labels?
-    # No. We generate a caption each step and use sequence-length independent
-    # machien translation metrics to define a cost function
-    # y = tf.placeholder("float", [None, wordCount])  
-    y = tf.placeholder("float", [None, wordCount])  
-    
-    return x, y
-
-#creates weight vector and bias vector applied to all cells in a layer
-def MakeLayerParameters(layerCount, wordCount):
-    # Define weights
-    weights = {
-        'out': tf.Variable(tf.random_normal([layerCount, wordCount]))
-    }
-
-    biases = {
-    'out': tf.Variable(tf.random_normal([wordCount]))
-    }
-    return weights, biases
-
-
-def RNN(x, phraseCount, phraseLength, wordCount, n_hidden, weights, biases):
-
-    # Prepare data shape to match `rnn` function requirements
-    # Current data input shape: (phraseLength, phraseCount, wordCount)
-    # Required shape: 'phraseCount' tensors list of shape (phraseLength, wordCount)
-
-    print("Input tensor: ", x)
-    # Permuting batch_size and phraseLength
-    # x = tf.transpose(x, [1, 0, 2])
-
-    # print("Transpose tensor: ", x)
-    # Reshaping to (phraseCount*phraseLength, wordCount)
-    # -1 infers dimension based on specified dimension
-
-    x = tf.reshape(x, [-1, wordCount])
-    print("Reshaped tensor: ", x)
-    
-    # Split to get a list of 'phraseCount' tensors of shape (phraseLength, wordCount)
-    print("Split dimension: ", tf.shape(x)) 
-    x = tf.split(0, phraseCount, x)
-    print("Split tensor: ", x)
-
-    # Define a lstm cell with tensorflow
-    lstm_cell = rnn_cell.BasicLSTMCell(n_hidden, forget_bias=1.0, state_is_tuple=True)
-    
-    # Get lstm cell output
-    outputs, states = rnn.rnn(lstm_cell, x, dtype=tf.float32)
-    
-    print("LSTM Output: ", outputs)
-    print("LSTM State Tuple 'c': ", states.c) 
-    print("LSTM State Tuple 'h': ", states.h)
-
-    # Linear activation, using rnn inner loop last output
-    #This is the model
-    code.interact(local=dict(globals(), **locals()))
-    #code.interact(local = locals())
-    #outputs [-1] represents the final cell in the LSTM block
-    #building a model wrt this cell gives us our output
-    return tf.matmul(outputs[-1], weights['out']) + biases['out']
-
-# Define loss and optimizer to perform gradient descent
-# Takes a network, an output structure (tensor y) and a learning rate 
-def LossFunction(pred, y, learning_rate):
-    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
-    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
-    return cost, optimizer
-
-# Evaluate model
-# Used to feed back model accuracy during and after training
-def AccuracyFunction(pred, y):
-    correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(y,1))
-    accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
-
-def RunModel(pred, x, y, phrases, captions, optimizer, cost, accuracy, training_iters, display_step, invertDict):
-    #input_phrases = tf.Variable(x, trainable=False, collections=[])
-    #input_captions = tf.Variable(y, trainable=False, collections=[])
-
-    #input_phrases = tf.constant(phrases)
-    #input_captions = tf.constant(captions)
-    
-    #print (input_phrases)
-    #print (input_captions)
-    
-    #print (phrases)
-    #print (captions)
-
-    #phrase, caption = tf.train.slice_input_producer(
-    #    [input_phrases, input_captions], num_epochs = training_iters)
-
-    #print ("Phrase shape: %s") % (tf.shape(phrases))
-
-    # Initializing the variables
-    init = tf.initialize_all_variables()
-    
-    # Launch the graph
-    with tf.Session() as sess:
-        runResult = sess.run(init)
-        step = 0
-        # Keep training until reach max iterations
-        # Each step is one image, associated with five phrases and a caption
-        while step < training_iters:
-            # Run optimization op (backprop)
-            print("Optimizing...")
-            #print("Phrases: ", phrases)
-            trainDict = {x: phrases, y: captions}
-            print (trainDict)
-            output = sess.run(optimizer, feed_dict=trainDict)
-            probs = sess.run(pred, feed_dict=trainDict)
-            print (probs)
-            print (generate_caption(probs, invertDict))
-            #code.interact(local=dict(globals(), **locals()))
-            '''if step % display_step == 0:
-                # caption = generate_caption()
-                # Calculate batch accuracy
-                #acc = sess.run(accuracy, feed_dict={x: caption, y: captions})
-                acc = sess.run(accuracy, feed_dict={x: phrases, y: captions})
-                # Calculate batch loss
-                #loss = sess.run(cost, feed_dict={x: caption, y: captions})
-                loss = sess.run(cost, feed_dict={x: phrases, y: captions})
-                print("Iter " + str(step) + ", Minibatch Loss= " + \
-                  "{:.6f}".format(loss) + ", Training Accuracy= " + \
-                  "{:.5f}".format(acc))'''
-            step += 1
-        print("Optimization Finished!")
-    return sess
-    #closure = tf.Session.close(sess)
-    #print (runResult)
-    #print (closure)
-    
-
-def generate_caption(probabilities, invert):
-    gen = []
-    cap = ""
-    for prob in probabilities:
-        ind = np.argmax(prob)
-        gen.append(ind)
-        cap += invert[ind]
-    return cap
-
-'''def fill_feed_dict(data_set, phrases_pl, captions_pl):
-  Fills the feed_dict for training the given step.
-  A feed_dict takes the form of:
-  feed_dict = {
-      <placeholder>: <tensor of values to be passed for placeholder>,
-      ....
-  }
-  Args:
-    data_set: The set of phrases and captions
-    phrases_pl: The phrases placeholder.
-    captions_pl: The captions placeholder.
-  Returns:
-    feed_dict: The feed dictionary mapping from placeholders to values.
-  
-  # Create the feed_dict for the placeholders
-  images_feed, labels_feed = data_set.next_batch(FLAGS.batch_size,
-                                                 FLAGS.fake_data)
-  feed_dict = {
-      images_pl: images_feed,
-      labels_pl: labels_feed,
-  }
-return feed_dict'''
+    def sample(self, session, seed = '\''):
+        state = session.run(self.initial_state)  #See constructor - tensor of 0's
+        for char in seed[:-1]:
+            x = np.zeros((self.inputs.batch_size, self.inputs.phrase_dimension, self.inputs.word_dimension))
+            x[0, 0] = self.encoder[char]
+            feed = {self._x: x, self.initial_state:state}
+            [state] = session.run([self.final_state], feed)
+            
+        #Seed state is trained network on <START> = '\''
+        ret = seed
+        char = seed[-1]
+        num = self.inputs.phrase_dimension #For now, fixed length captions
+        for n in range(num):              #Ideally this loop is 'until generate <STOP>'
+            x = np.zeros((self.inputs.batch_size, self.inputs.phrase_dimension, self.inputs.word_dimension))
+            x[0, 0] = self.encoder[char]
+            print (char)
+            feed = {self._x: x, self.initial_state:state}
+            [probs, state] = session.run([self.probabilities, self.final_state], feed)
+            p = probs[0]                #We only sample the next word in the sequence   
+            sample = np.argmax(p)          #We can write more complicated sampling functions
+            pred = self.decoder[sample]
+            ret += pred
+            char = pred
+        return ret
