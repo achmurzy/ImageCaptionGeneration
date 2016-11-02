@@ -69,6 +69,9 @@ def get_coco_lexicon(_captions):
 #need to be in /densecap to execute "run_model.lua" because I can't figure
 #out how to install lua modules. 
 def coco_to_densecap(imgIDs):
+    print "Cleaning processing folder..."
+    deleteCommand = 'rm -rf densecap_images && mkdir densecap_images'
+    subprocess.call(deleteCommand, shell=True)
     for x in imgIDs:
         command = 'cp images/COCO_train2014_%s.jpg densecap_images'%(str(x).zfill(12))
         print str(x) + " Executing: "+ command
@@ -147,7 +150,7 @@ def extract_phrase_vectors(phrase_count, phraseLength, imgCount, image_props, in
             for word in phrase.split():
                 #print word
                 if count >= phraseLength:
-                    print "Break phrase"
+                    #print "Break phrase"
                     break
                 elif word in invertDict:
                     #print "Add word"
@@ -170,12 +173,10 @@ def extract_caption_vectors(phraseLength, imgCount, invertDict, captions):
     one_hot_list = [[[]] * phraseLength] * imgCount
     imgID = 0
     for cap in captions:
-        print cap
         for caption in captions[cap]:
             count = 0
-            print caption
             for word in re.split('[(\'\.\s)]', caption): 
-                print word
+                #print word
                 if count >= phraseLength:
                     #print "break cap"
                     break

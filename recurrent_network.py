@@ -1,12 +1,5 @@
 '''
-A Recurrent Neural Network (LSTM) implementation example using TensorFlow library.
-This example is using the MNIST database of handwritten digits (http://yann.lecun.com/exdb/mnist/)
-Long Short Term Memory paper: http://deeplearning.cs.cmu.edu/pdfs/Hochreiter97_lstm.pdf
-
-Author: Aymeric Damien
-Project: https://github.com/aymericdamien/TensorFlow-Examples/
-
-Modifying this script to include some MS-COCO data and start building a network from it.
+gotta be bad to get good
 '''
 
 from __future__ import print_function
@@ -17,6 +10,7 @@ from tensorflow.python.ops import rnn, rnn_cell
 import numpy as np
 from nltk import bleu_score
 import code
+import matplotlib.pyplot as plt
 
 # To make input, we need to create a tensor
 # Our tensor will include:
@@ -40,7 +34,7 @@ class NetworkInput(object):
     def captions(self, value):
         self.inputs[1] = value
 
-    def __init__(self, batchSize, phraseCount, phraseDim, wordDim, inputs, numEpochs):
+    def __init__(self, batchSize, phraseCount, phraseDim, wordDim, inputs, numEpochs, displayStep):
         self.phrase_count = phraseCount
         self.phrase_dimension = phraseDim
         self.word_dimension = wordDim
@@ -48,6 +42,7 @@ class NetworkInput(object):
                        np.asarray(inputs[1], dtype=np.float32)] 
         self.batch_size = batchSize
         self.num_epochs = numEpochs
+        self.display_step = displayStep
 
 class NetworkParameters(object):
     def __init__(self, layerSize, numLayers, learningRate):
@@ -55,6 +50,21 @@ class NetworkParameters(object):
         self.num_layers = numLayers
         self.learning_rate = learningRate
         self.data_type = tf.float32
+
+class NetworkResults(object):
+    def __init__(self):
+        self.costHistory = {}
+
+    def record_point(self, key, val):
+        self.costHistory[key] = val
+        
+    def plot_results(self):
+        plt.plot(self.costHistory.keys(), self.costHistory.values())
+        plt.xticks(range(len(self.costHistory)), self.costHistory.keys())
+        plt.xlabel('epochs')
+        plt.ylabel('cost')
+        plt.show()
+        
 
 class LSTMNet(object):
 
@@ -65,6 +75,10 @@ class LSTMNet(object):
     @property
     def parameters(self):
         return self._parameters
+
+    @property
+    def results(self):
+        return self._results
 
     @property
     def model(self):
@@ -122,11 +136,13 @@ class LSTMNet(object):
         #Add network parameters objects
         self._input = inputs
         self._parameters = params
+        self._results = NetworkResults()
+        
         self._decoder = codex[0]
         self._encoder = codex[1]
 
+        self.epochs = 0
         self.epoch_iteration = 0
-        
 
         #####################Build the LSTM network#############################
 
@@ -199,32 +215,40 @@ class LSTMNet(object):
         self._optimizer = tf.train.AdamOptimizer(
             learning_rate=params.learning_rate).minimize(self._cost)
 
-    def run_epoch(self):
-        """Runs the model on the given data."""
+    def train_network(self):
         init = tf.initialize_all_variables()
         with tf.Session() as session:
             session.run(init)
-            costs = 0.0
-            iters = 0
-            state = session.run(self.initial_state)
-            fetches = {"cost": self.cost, "final_state": self.final_state, 
-                           "eval_op":self.optimizer}
-            
-            for step in range(self.training_iterations):
-                phrases, captions = self.next_batch()
-                train_dict = {self._x: phrases, self._y: captions}                
-                vals = session.run(fetches, train_dict)
-                """Equivalent to:                         Against input x, y (phrases, captions)
-                session.run(self.final_state, train_dict) Compute probability distribution
-                session.run(self.cost, train_dict)        Calculate loss
-                session.run(self.optimizer, train_dict)   Update weights by backpropagation
-                """
-                cost = vals["cost"]
-                state = vals["final_state"]
-                
-                self.sample(session)  # -- get caption
-                costs += cost
+            while self.epochs < self.inputs.num_epochs:
+                self.run_epoch(session)
+                print(self.sample(session))  # -- get caption
+        self.results.plot_results()
 
+    def run_epoch(self, session):
+        """Runs the model on the given data."""
+        costs = 0.0
+        iters = 0
+        state = session.run(self.initial_state)
+        fetches = {"cost": self.cost, "final_state": self.final_state, 
+                       "eval_op":self.optimizer}
+        print ("Epoch: ", self.epochs)
+        for step in range(self.training_iterations):
+            phrases, captions = self.next_batch()
+            train_dict = {self._x: phrases, self._y: captions}                
+            vals = session.run(fetches, train_dict)
+            """Equivalent to:                         Against input x, y (phrases, captions)
+            session.run(self.final_state, train_dict) Compute probability distribution
+            session.run(self.cost, train_dict)        Calculate loss
+            session.run(self.optimizer, train_dict)   Update weights by backpropagation
+            """
+            cost = vals["cost"]
+            state = vals["final_state"]
+
+            costs += cost
+        print ("Cost: ", cost)
+        if self.epochs % self.inputs.display_step == 0:
+            self.results.record_point(self.epochs, costs)
+        self.epochs += 1
         return np.exp(costs)
 
     def sample(self, session, seed = '\''):
@@ -234,11 +258,11 @@ class LSTMNet(object):
             #              self.inputs.phrase_dimension, self.inputs.word_dimension))
             x = np.zeros((self.inputs.phrase_count, 
                           self.inputs.phrase_dimension, self.inputs.word_dimension))
-            
+
             x[0, 0] = self.encoder[char]
             feed = {self._x: x, self.initial_state:state}
             [state] = session.run([self.final_state], feed)
-            
+
         #Seed state is trained network on <START> = '\''
         ret = seed
         char = seed[-1]
@@ -248,9 +272,8 @@ class LSTMNet(object):
             #              self.inputs.phrase_dimension, self.inputs.word_dimension))
             x = np.zeros((self.inputs.phrase_count, 
                           self.inputs.phrase_dimension, self.inputs.word_dimension))
-            
+
             x[0, 0] = self.encoder[char]
-            print (char)
             feed = {self._x: x, self.initial_state:state}
             [probs, state] = session.run([self.probabilities, self.final_state], feed)
             p = probs[0]                #We only sample the next word in the sequence   
@@ -258,6 +281,7 @@ class LSTMNet(object):
             pred = self.decoder[sample]
             ret += pred
             char = pred
+            
         return ret
 
     #Retrieve next set of examples based on batch size - or right now, phraseCount

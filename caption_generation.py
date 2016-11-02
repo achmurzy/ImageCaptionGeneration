@@ -9,7 +9,7 @@ import re
 #we can input to our RNN
 
 ##########MS-COCO TRAINING CAPTION EXTRACTION##############
-inputImgCount = 5
+inputImgCount = 50
 
 #get three img IDs from MS-COCO
 imgIDs = dp.get_coco_imgs(inputImgCount)
@@ -29,10 +29,10 @@ dp.build_lookup_lexicon(lex, wordDict, invertDict)
 ###########DENSECAP PHRASE EXTRACTION######################
 #Use if images need re-processing by densecap
 #Run as python caption_generation.py 1
-'''if(len(sys.argv) > 1):
-    processImages = int(sys.argv[1])
-    if(processImages):
-        dp.coco_to_densecap(imgIDs)'''
+#if(len(sys.argv) > 1):
+#processImages = int(sys.argv[1])
+#if(processImages):
+#dp.coco_to_densecap(imgIDs)
 
 #Get densecap results
 results = dp.json_to_dict("results/results.json")
@@ -50,15 +50,15 @@ batch_size = 1 # of images to show per training iteration
 phraseCount = 5 # of densecap phrases to use in tensor input per epoch
 phraseLength = 5 # of words per phrase. This will become a function of phrase inputs
 LEX_DIM = (len(wordDict))
-num_epochs = 1
-display_step = 1
+num_epochs = 100
+display_step = 2
 
 
 captions = dp.extract_caption_vectors(phraseLength, inputImgCount, invertDict, captions)
 phrases = dp.extract_phrase_vectors(
     phraseCount, phraseLength, inputImgCount, image_props, invertDict)
 
-inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs)
+inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs, display_step)
 params = rn.NetworkParameters(n_hidden, n_layers, learning_rate) 
 ann = rn.LSTMNet(inputs, params, [wordDict, invertDict])
-ann.run_epoch()
+ann.train_network()
