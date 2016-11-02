@@ -9,6 +9,7 @@ import subprocess
 import re
 import math
 import os
+import code
 
 import salience
 
@@ -34,11 +35,13 @@ def coco_to_captions(imgIDs):
 #Returns a single caption associated with each image from the set of annotations
 #images have multiple captions which we may be able to take advantage of later
 #We also add <START> and <STOP> symbols - we use escaped characters \' and \" respectively
-def get_coco_captions(_captions):
+def get_coco_captions(_captions, caption_count=1):
     capDict = {}
     for x in _captions:
         if not x['image_id'] in capDict:
-            capDict[x['image_id']] = START + x['caption']
+            capDict[x['image_id']] = [START + x['caption']]
+        elif len(capDict[x['image_id']]) < caption_count:
+            capDict[x['image_id']].append(START + x['caption'])
     return capDict
 
 #Returns a sorted list of unique words from the set of annotations
@@ -132,15 +135,15 @@ def string_to_vector(word, invertDict):
 def vector_to_string(vector, wordDict):
     return wordDict[np.argmax(vector)]
 
-def extract_phrase_vectors(phraseLength, batch_size, training_iters, image_props, invertDict):
-    one_hot_list = [[[]] * phraseLength] * batch_size
-    for x in range(0, training_iters):
+def extract_phrase_vectors(phrase_count, phraseLength, imgCount, image_props, invertDict):
+    one_hot_list = [[[[]] * phraseLength] * phrase_count] * imgCount
+    for x in range(0, imgCount):
         salient = salience.salient_phrases(
-            image_props, x, lambda: salience.k_top_scores(image_props[x], batch_size))
+            image_props, x, lambda: salience.k_top_scores(image_props[x], phrase_count))
         phraseI = 0
         for phrase in salient:
             count = 0
-            print ("Phrase ", phrase)
+            #print ("Phrase ", phrase)
             for word in phrase.split():
                 #print word
                 if count >= phraseLength:
@@ -148,40 +151,45 @@ def extract_phrase_vectors(phraseLength, batch_size, training_iters, image_props
                     break
                 elif word in invertDict:
                     #print "Add word"
-                    one_hot_list[phraseI][count] = string_to_vector(word, invertDict)
+                    one_hot_list[x][phraseI][count] = string_to_vector(word, invertDict)
                 else:
                     #print "Fill void"
-                    one_hot_list[phraseI][count] = empty_one_hot_vector(len(invertDict))
+                    one_hot_list[x][phraseI][count] = empty_one_hot_vector(len(invertDict))
                 #print count
                 count = count + 1
             while count < phraseLength:  #Padding
-                one_hot_list[phraseI][count] = empty_one_hot_vector(len(invertDict))
+                one_hot_list[x][phraseI][count] = empty_one_hot_vector(len(invertDict))
                 count = count + 1
             #print count
             #print phraseI
             phraseI = phraseI + 1
     return one_hot_list
 
-def extract_caption_vectors(phraseLength, invertDict, captions):
-    one_hot_list = []
+#Remember that one day we will need to generalize this yet again for captionCount
+def extract_caption_vectors(phraseLength, imgCount, invertDict, captions):
+    one_hot_list = [[[]] * phraseLength] * imgCount
+    imgID = 0
     for cap in captions:
-        #print captions[cap]  #Regex parses START, STOP, preserves delimiters
-        count = 0
-        for word in re.split('[(\'\.\s)]', captions[cap]): 
-            #print word
-            if count >= phraseLength:
-                #print "break cap"
-                break
-            elif word in invertDict:
-                #print "To one-hot"
-                one_hot_list.append(string_to_vector(word, invertDict))
-            else:
-                #print "Caption split deviant"
-                one_hot_list.append(empty_one_hot_vector(len(invertDict)))
-            count = count + 1
-        while count < phraseLength:    #Padding
-            one_hot_list.append(empty_one_hot_vector(len(invertDict)))
-            count = count + 1
+        print cap
+        for caption in captions[cap]:
+            count = 0
+            print caption
+            for word in re.split('[(\'\.\s)]', caption): 
+                print word
+                if count >= phraseLength:
+                    #print "break cap"
+                    break
+                elif word in invertDict:
+                    #print "To one-hot"
+                    one_hot_list[imgID][count] = (string_to_vector(word, invertDict))
+                else:
+                    #print "Caption split deviant"
+                    one_hot_list[imgID][count] = (empty_one_hot_vector(len(invertDict)))
+                count = count + 1
+            while count < phraseLength:    #Padding
+                one_hot_list[imgID][count] = (empty_one_hot_vector(len(invertDict)))
+                count = count + 1
+        imgID = imgID + 1
     return one_hot_list
 
 

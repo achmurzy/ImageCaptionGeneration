@@ -29,18 +29,25 @@ class NetworkInput(object):
     @property
     def phrases(self):
         return self.inputs[0]
+    @phrases.setter
+    def phrases(self, value):
+        self.inputs[0] = value
 
     @property
     def captions(self):
         return self.inputs[1]
+    @captions.setter
+    def captions(self, value):
+        self.inputs[1] = value
 
-    def __init__(self, batchSize, phraseDim, wordDim, inputs, epochSize, trainingIterations):
+    def __init__(self, batchSize, phraseCount, phraseDim, wordDim, inputs, numEpochs):
+        self.phrase_count = phraseCount
         self.phrase_dimension = phraseDim
         self.word_dimension = wordDim
-        self.inputs = inputs
+        self.inputs = [np.asarray(inputs[0], dtype=np.float32), 
+                       np.asarray(inputs[1], dtype=np.float32)] 
         self.batch_size = batchSize
-        self.epoch_size = epochSize
-        self.training_iterations = trainingIterations
+        self.num_epochs = numEpochs
 
 class NetworkParameters(object):
     def __init__(self, layerSize, numLayers, learningRate):
@@ -103,6 +110,14 @@ class LSTMNet(object):
     def encoder(self):
         return self._encoder
 
+    @property
+    def data_size(self):
+        return len(self.inputs.phrases)
+
+    @property 
+    def training_iterations(self):
+        return self.data_size / self.inputs.batch_size
+
     def __init__(self, inputs, params, codex):
         #Add network parameters objects
         self._input = inputs
@@ -110,22 +125,28 @@ class LSTMNet(object):
         self._decoder = codex[0]
         self._encoder = codex[1]
 
-        #Build the LSTM network
+        self.epoch_iteration = 0
+        
+
+        #####################Build the LSTM network#############################
 
         # tf Graph input - placeholders must be fed training data on execution
         # 'None' as a dimension allows that dimension to be any length
         self.placeholder_x = tf.placeholder(params.data_type, 
-                        [inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension])
-        #self.placeholder_y = tf.placeholder(params.data_type, 
-        #                    [inputs.batch_size, inputs.word_dimension])
+        [inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
+        #self.placeholder_x = tf.placeholder(params.data_type, 
+        #[inputs.batch_size, inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
+        
         self.placeholder_y = tf.placeholder(params.data_type, 
                             [inputs.phrase_dimension, inputs.word_dimension])
-        #self.placeholder_y = tf.placeholder(tf.int32, 
-        #                    [inputs.batch_size, inputs.word_dimension])
+        #self.placeholder_y = tf.placeholder(params.data_type, 
+        #[inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension])
         
+        #x = tf.reshape(self._x, [ inputs.batch_size*inputs.phrase_dimension, -1])
+        #x = tf.split(0, inputs.batch_size, x) 
         x = tf.reshape(self._x, [-1, inputs.word_dimension])
-        x = tf.split(0, inputs.batch_size, x)
-        print (x)
+        x = tf.split(0, inputs.phrase_dimension, x) 
+        
         # Define an lstm cell with tensorflow
         lstm_cell = rnn_cell.BasicLSTMCell(
             params.layer_size, forget_bias=1.0, state_is_tuple=True)
@@ -144,6 +165,7 @@ class LSTMNet(object):
         self._final_state = state
     
         # Define weights according to dimensionality of hidden layers
+        # Randomly initializing weights and biases ensures feature differentiation
         weights = {
             'out': tf.Variable(tf.random_normal([params.layer_size, inputs.word_dimension]))}
         biases = {'out': tf.Variable(tf.random_normal([inputs.word_dimension]))}
@@ -162,15 +184,15 @@ class LSTMNet(object):
         #self.probabilities is the final layer of the network
         #squash all predictions into range 0->1 for sane inference 
         self._probs = tf.nn.softmax(self._model)
-        
+        #code.interact(local=dict(globals(), **locals()))
         #self._cost will become a custom machine translation heuristic and other things yo
         self._cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(self._model, self._y))
-        logits = tf.split(0, inputs.batch_size, tf.reshape(
-                        self._x, [inputs.batch_size, -1]))
-        targets = [self._y] * inputs.batch_size
-        weights = [tf.ones(self.inputs.batch_size * inputs.word_dimension, 
-             dtype=params.data_type)] * inputs.batch_size
-        #code.interact(local=dict(globals(), **locals()))
+        #logits = tf.split(0, inputs.batch_size, tf.reshape(
+        #                self._x, [inputs.batch_size, -1]))
+        #targets = [self._y] * inputs.batch_size
+        #weights = [tf.ones(self.inputs.batch_size * inputs.word_dimension, 
+        #     dtype=params.data_type)] * inputs.batch_size
+        
         #self._cost = tf.reduce_mean(tf.nn.seq2seq.sequence_loss(logits,targets,weights))
         
         #I don't know what this does. Some variant of backpropagation
@@ -187,20 +209,20 @@ class LSTMNet(object):
             state = session.run(self.initial_state)
             fetches = {"cost": self.cost, "final_state": self.final_state, 
                            "eval_op":self.optimizer}
-            for step in range(self.inputs.training_iterations):
-                train_dict = {self._x: self.inputs.phrases, 
-                                      self._y: self.inputs.captions}
-                
+            
+            for step in range(self.training_iterations):
+                phrases, captions = self.next_batch()
+                train_dict = {self._x: phrases, self._y: captions}                
                 vals = session.run(fetches, train_dict)
                 """Equivalent to:                         Against input x, y (phrases, captions)
-                session.run(self.final_state, train_dict) Compute distribution -- get caption
+                session.run(self.final_state, train_dict) Compute probability distribution
                 session.run(self.cost, train_dict)        Calculate loss
                 session.run(self.optimizer, train_dict)   Update weights by backpropagation
                 """
                 cost = vals["cost"]
                 state = vals["final_state"]
                 
-                self.sample(session)
+                self.sample(session)  # -- get caption
                 costs += cost
 
         return np.exp(costs)
@@ -208,7 +230,11 @@ class LSTMNet(object):
     def sample(self, session, seed = '\''):
         state = session.run(self.initial_state)  #See constructor - tensor of 0's
         for char in seed[:-1]:
-            x = np.zeros((self.inputs.batch_size, self.inputs.phrase_dimension, self.inputs.word_dimension))
+            #x = np.zeros((self.inputs.batch_size, self.inputs.phrase_count, 
+            #              self.inputs.phrase_dimension, self.inputs.word_dimension))
+            x = np.zeros((self.inputs.phrase_count, 
+                          self.inputs.phrase_dimension, self.inputs.word_dimension))
+            
             x[0, 0] = self.encoder[char]
             feed = {self._x: x, self.initial_state:state}
             [state] = session.run([self.final_state], feed)
@@ -218,7 +244,11 @@ class LSTMNet(object):
         char = seed[-1]
         num = self.inputs.phrase_dimension #For now, fixed length captions
         for n in range(num):              #Ideally this loop is 'until generate <STOP>'
-            x = np.zeros((self.inputs.batch_size, self.inputs.phrase_dimension, self.inputs.word_dimension))
+            #x = np.zeros((self.inputs.batch_size, self.inputs.phrase_count, 
+            #              self.inputs.phrase_dimension, self.inputs.word_dimension))
+            x = np.zeros((self.inputs.phrase_count, 
+                          self.inputs.phrase_dimension, self.inputs.word_dimension))
+            
             x[0, 0] = self.encoder[char]
             print (char)
             feed = {self._x: x, self.initial_state:state}
@@ -229,3 +259,25 @@ class LSTMNet(object):
             ret += pred
             char = pred
         return ret
+
+    #Retrieve next set of examples based on batch size - or right now, phraseCount
+    def next_batch(self):
+        start = self.epoch_iteration
+        self.epoch_iteration += self.inputs.batch_size
+        end = self.epoch_iteration
+        phrase_batch = self.inputs.phrases[start:end]
+        caption_batch = self.inputs.captions[start:end]
+    
+        if(self.epoch_iteration >= self.data_size):
+            self.epoch_iteration = 0
+            #Google has it shuffling inputs here          Could affect prediction/classification?
+            #to avoid fitting the order of images in the training set?
+            #code.interact(local=dict(globals(), **locals()))
+            shuffleIndices = np.arange(self.data_size)
+            np.random.shuffle(shuffleIndices)
+            self.inputs.phrases = self.inputs.phrases[shuffleIndices]
+            self.inputs.captions = self.inputs.captions[shuffleIndices]
+
+        return phrase_batch[0], caption_batch[0]
+        
+        
