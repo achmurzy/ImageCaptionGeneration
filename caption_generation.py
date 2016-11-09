@@ -9,7 +9,7 @@ import re
 #we can input to our RNN
 
 ##########MS-COCO TRAINING CAPTION EXTRACTION##############
-inputImgCount = 50
+inputImgCount = 1
 
 #get three img IDs from MS-COCO
 imgIDs = dp.get_coco_imgs(inputImgCount)
@@ -40,14 +40,19 @@ image_props = dp.dict_to_imgs(results)
     
 ###########NETWORK CONSTRUCTION AND EXECUTION################
 
+from itertools import chain
+def flatten(listOfLists):
+    return list(chain(*listOfLists))
+
 # Network Parameters 
 n_hidden = 64 # hidden layer num of features (# of 'neurons')
-n_layers = 5 # number of stacked layers - should equal number of phrases (so batch size?)
-learning_rate = 0.001
+n_layers = 1 # number of stacked layers - should equal number of phrases (so batch size?)
+learning_rate = 0.05 # SGD magnitude
+initializationScale = 0.1 # scale of weight intializations
 
 # Input Parameters
 batch_size = 1 # of images to show per training iteration
-phraseCount = 5 # of densecap phrases to use in tensor input per epoch
+phraseCount = 1 # of densecap phrases to use in tensor input per epoch
 phraseLength = 5 # of words per phrase. This will become a function of phrase inputs
 LEX_DIM = (len(wordDict))
 num_epochs = 100
@@ -58,7 +63,22 @@ captions = dp.extract_caption_vectors(phraseLength, inputImgCount, invertDict, c
 phrases = dp.extract_phrase_vectors(
     phraseCount, phraseLength, inputImgCount, image_props, invertDict)
 
-inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs, display_step)
-params = rn.NetworkParameters(n_hidden, n_layers, learning_rate) 
-ann = rn.LSTMNet(inputs, params, [wordDict, invertDict])
+flatPhrases = phrases
+flatCaptions = flatten(captions)
+flatCaptions = flatten(flatCaptions)
+for x in xrange(0, 2):
+    flatPhrases = flatten(flatPhrases)
+
+code.interact(local=dict(globals(), **locals()))
+#code.interact(local=dict(globals(), **locals()))
+import reader
+batchedPhrases, batchedCaptions, epochSize = reader.ptb_producer(
+flatPhrases, flatCaptions, phraseCount, phraseLength, LEX_DIM)
+code.interact(local=dict(globals(), **locals()))
+
+#inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs)
+inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, batchedPhrases, batchedCaptions, num_epochs, inputImgCount)
+params = rn.NetworkParameters(n_hidden, n_layers, learning_rate, initializationScale)
+results = rn.NetworkResults(display_step) 
+ann = rn.LSTMNet(inputs, params, results, [wordDict, invertDict])
 ann.train_network()

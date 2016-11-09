@@ -274,8 +274,8 @@ class LSTMNet(object):
             session.run(initializer)
             while self.epochs <= self.inputs.num_epochs:
                 self.run_epoch(session)
-        #with tf.Session() as session:
-        #    print(self.sample(session))  # -- get caption
+        with tf.Session() as session:
+            print(self.sample(session))  # -- get caption
         self.results.plot_results()
 
     def run_epoch(self, session):
@@ -326,7 +326,7 @@ class LSTMNet(object):
         print ("loopin")
         x[0, 0] = self.encoder[char]
         feed = {self._x: x, self.initial_state:state}
-        [state] = session.run([self.final_state], feed)
+        [state] = session.run([self.final_state], feed) #dies
         code.interact(local=dict(globals(), **locals()))
         #Seed state is trained network on <START> = '\''
         
