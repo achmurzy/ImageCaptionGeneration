@@ -61,4 +61,5 @@ phrases = dp.extract_phrase_vectors(
 inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs, display_step)
 params = rn.NetworkParameters(n_hidden, n_layers, learning_rate) 
 ann = rn.LSTMNet(inputs, params, [wordDict, invertDict])
+
 ann.train_network()

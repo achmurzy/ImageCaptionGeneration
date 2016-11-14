@@ -8,7 +8,7 @@ import densecap_processing as dp
 import tensorflow as tf
 from tensorflow.python.ops import rnn, rnn_cell
 import numpy as np
-from nltk import bleu_score
+
 import code
 import matplotlib.pyplot as plt
 
@@ -60,7 +60,7 @@ class NetworkResults(object):
         
     def plot_results(self):
         plt.plot(self.costHistory.keys(), self.costHistory.values())
-        plt.xticks(range(len(self.costHistory)), self.costHistory.keys())
+        plt.xticks(range(len(self.costHistory)), sorted(self.costHistory.keys()))
         plt.xlabel('epochs')
         plt.ylabel('cost')
         plt.show()
@@ -79,6 +79,14 @@ class LSTMNet(object):
     @property
     def results(self):
         return self._results
+
+    @property
+    def log_path(self):
+        return "results/masterlog"
+
+    @property
+    def global_step(self):
+        return self.globalStep
 
     @property
     def model(self):
@@ -133,91 +141,104 @@ class LSTMNet(object):
         return self.data_size / self.inputs.batch_size
 
     def __init__(self, inputs, params, codex):
+        with tf.variable_scope("Model", reuse=None):
         #Add network parameters objects
-        self._input = inputs
-        self._parameters = params
-        self._results = NetworkResults()
-        
-        self._decoder = codex[0]
-        self._encoder = codex[1]
 
-        self.epochs = 0
-        self.epoch_iteration = 0
+            self._input = inputs
+            self._parameters = params
+            self._results = NetworkResults()
 
-        #####################Build the LSTM network#############################
+            self._decoder = codex[0]
+            self._encoder = codex[1]
 
-        # tf Graph input - placeholders must be fed training data on execution
-        # 'None' as a dimension allows that dimension to be any length
-        self.placeholder_x = tf.placeholder(params.data_type, 
-        [inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
-        #self.placeholder_x = tf.placeholder(params.data_type, 
-        #[inputs.batch_size, inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
-        
-        self.placeholder_y = tf.placeholder(params.data_type, 
-                            [inputs.phrase_dimension, inputs.word_dimension])
-        #self.placeholder_y = tf.placeholder(params.data_type, 
-        #[inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension])
-        
-        #x = tf.reshape(self._x, [ inputs.batch_size*inputs.phrase_dimension, -1])
-        #x = tf.split(0, inputs.batch_size, x) 
-        x = tf.reshape(self._x, [-1, inputs.word_dimension])
-        x = tf.split(0, inputs.phrase_dimension, x) 
-        
-        # Define an lstm cell with tensorflow
-        lstm_cell = rnn_cell.BasicLSTMCell(
-            params.layer_size, forget_bias=1.0, state_is_tuple=True)
-        layer_cell = rnn_cell.MultiRNNCell([lstm_cell] * params.num_layers, state_is_tuple=True)
-        
-        # Save a snapshot of the initial state for generating sequences later
-        self._initial_state = layer_cell.zero_state(inputs.phrase_dimension, params.data_type)
-        
-        outputs, state = rnn.rnn(
-            layer_cell, x, initial_state = self._initial_state, dtype=params.data_type)
-    
-        #Used as recurrent input to LSTM layers during sequence generation
-        #Represents (c, h) values for params.num_layer of stacked LSTM cells
-        #(Given as 'unrolled' representation) - Also used as input to model by determining
-        # value of outputs[-1] - therefore directly used to compute probabilities
-        self._final_state = state
-    
-        # Define weights according to dimensionality of hidden layers
-        # Randomly initializing weights and biases ensures feature differentiation
-        weights = {
-            'out': tf.Variable(tf.random_normal([params.layer_size, inputs.word_dimension]))}
-        biases = {'out': tf.Variable(tf.random_normal([inputs.word_dimension]))}
+            self.epochs = 0
+            self.epoch_iteration = 0
 
-        #outputs [-1] represents the final cell in the LSTM block, given as batch_size
-        #of tensors for handling output
-        #Output in LSTM is a function of the cell state (c) and the hidden state (h)
-        #See LSTMStateTuple output of rnn_cell.BasicLSTMCell (state)
-        
-        #This represents the model we apply to the LSTM cell layer
-        #This reconciles the dimensionality of hidden features (layer_size) and LSTM states
-        #with dimensionality of our sequence (phrase_dim, word_dim)
-        #Returns sequence predictions - These values are used for classification
-        self._model =  tf.matmul(outputs[-1], weights['out']) + biases['out']
-        
-        #self.probabilities is the final layer of the network
-        #squash all predictions into range 0->1 for sane inference 
-        self._probs = tf.nn.softmax(self._model)
-        #code.interact(local=dict(globals(), **locals()))
-        #self._cost will become a custom machine translation heuristic and other things yo
-        self._cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(self._model, self._y))
-        #logits = tf.split(0, inputs.batch_size, tf.reshape(
-        #                self._x, [inputs.batch_size, -1]))
-        #targets = [self._y] * inputs.batch_size
-        #weights = [tf.ones(self.inputs.batch_size * inputs.word_dimension, 
-        #     dtype=params.data_type)] * inputs.batch_size
-        
-        #self._cost = tf.reduce_mean(tf.nn.seq2seq.sequence_loss(logits,targets,weights))
-        
-        #I don't know what this does. Some variant of backpropagation
-        self._optimizer = tf.train.AdamOptimizer(
-            learning_rate=params.learning_rate).minimize(self._cost)
+
+
+            #####################Build the LSTM network#############################
+
+            # tf Graph input - placeholders must be fed training data on execution
+            # 'None' as a dimension allows that dimension to be any length
+            self.placeholder_x = tf.placeholder(params.data_type, 
+            [inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
+            #self.placeholder_x = tf.placeholder(params.data_type, 
+            #[inputs.batch_size, inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
+
+            self.placeholder_y = tf.placeholder(params.data_type, 
+                                [inputs.phrase_dimension, inputs.word_dimension])
+            #self.placeholder_y = tf.placeholder(params.data_type, 
+            #[inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension])
+
+            #x = tf.reshape(self._x, [ inputs.batch_size*inputs.phrase_dimension, -1])
+            #x = tf.split(0, inputs.batch_size, x) 
+            x = tf.reshape(self._x, [-1, inputs.word_dimension])
+            x = tf.split(0, inputs.phrase_dimension, x) 
+
+            with tf.variable_scope("RNN"):
+                lstm_cell = rnn_cell.BasicLSTMCell(
+                    params.layer_size, forget_bias=1.0, state_is_tuple=True)
+                layer_cell = rnn_cell.MultiRNNCell(
+                    [lstm_cell] * params.num_layers, state_is_tuple=True)
+
+                # Save a snapshot of the initial state for generating sequences later
+                self._initial_state = layer_cell.zero_state(
+                    inputs.phrase_dimension, params.data_type)
+
+                outputs, state = rnn.rnn(
+                    layer_cell, x, initial_state = self._initial_state, dtype=params.data_type)
+
+                #Used as recurrent input to LSTM layers during sequence generation
+                #Represents (c, h) values for params.num_layer of stacked LSTM cells
+                # value of outputs[-1] - therefore directly used to compute probabilities
+                self._final_state = state
+
+            # Define weights according to dimensionality of hidden layers
+            # Randomly initializing weights and biases ensures feature differentiation
+            weights = {
+                'out': tf.Variable(tf.random_normal([params.layer_size, inputs.word_dimension]))}
+            biases = {'out': tf.Variable(tf.random_normal([inputs.word_dimension]))}
+
+            #outputs [-1] represents the final cell in the LSTM block, given as batch_size
+            #of tensors for handling output
+            #Output in LSTM is a function of the cell state (c) and the hidden state (h)
+            #See LSTMStateTuple output of rnn_cell.BasicLSTMCell (state)
+
+            #This represents the model we apply to the LSTM cell layer
+            #This reconciles the dimensionality of hidden features (layer_size) and LSTM states
+            #with dimensionality of our sequence (phrase_dim, word_dim)
+            #Returns sequence predictions - These values are used for classification
+            self._model =  tf.matmul(outputs[-1], weights['out']) + biases['out']
+
+            #self.probabilities is the final layer of the network
+            #squash all predictions into range 0->1 for sane inference 
+            self._probs = tf.nn.softmax(self._model)
+            #code.interact(local=dict(globals(), **locals()))
+            #self._cost will become a custom machine translation heuristic and other things yo
+            self._cost = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(self._model, self._y))
+            #logits = tf.split(0, inputs.batch_size, tf.reshape(
+            #                self._x, [inputs.batch_size, -1]))
+            #targets = [self._y] * inputs.batch_size
+            #weights = [tf.ones(self.inputs.batch_size * inputs.word_dimension, 
+            #     dtype=params.data_type)] * inputs.batch_size
+
+            #self._cost = tf.reduce_mean(tf.nn.seq2seq.sequence_loss(logits,targets,weights))
+
+            #I don't know what this does. Some variant of backpropagation
+            #self._optimizer = tf.train.AdamOptimizer(
+            #    learning_rate=params.learning_rate).minimize(self._cost)
+            self.globalStep = tf.Variable(0, name='global_step', trainable=False)
+            self._optimizer = tf.train.AdamOptimizer(
+                learning_rate=params.learning_rate).minimize(self._cost, global_step=self.globalStep)
 
     def train_network(self):
         init = tf.initialize_all_variables()
-        with tf.Session() as session:
+        #Supervisor does nice things, like start queues
+        saves = tf.train.Saver(write_version=tf.train.SaverDef.V2)
+        sv = tf.train.Supervisor(logdir=self.log_path, saver=saves, 
+                                 global_step=self.global_step, save_model_secs=1)      
+        with sv.managed_session() as session:
             session.run(init)
             while self.epochs < self.inputs.num_epochs:
                 self.run_epoch(session)
@@ -246,6 +267,7 @@ class LSTMNet(object):
 
             costs += cost
         print ("Cost: ", cost)
+         
         if self.epochs % self.inputs.display_step == 0:
             self.results.record_point(self.epochs, costs)
         self.epochs += 1
