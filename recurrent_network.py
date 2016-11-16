@@ -166,44 +166,17 @@ class LSTMNet(object):
 
             #####################Build the LSTM network#############################
 
-            # tf Graph input - placeholders must be fed training data on execution
-            # 'None' as a dimension allows that dimension to be any length
-
-            #These placeholders need to be integer-typed to use embeddings
-            #embeddings allow us to encode data for the hidden layer
-
-            #self.placeholder_x = tf.placeholder(tf.int32, 
-            #[inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
-
             with tf.variable_scope("Inputs"):
                 self.placeholder_x = self.inputs.phrases
-                #code.interact(local=dict(globals(), **locals()))
-                #self.placeholder_x = tf.placeholder(params.data_type, 
-                #[inputs.batch_size, inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
-
                 self.placeholder_y = self.inputs.captions
-                #self.placeholder_y = tf.placeholder(params.data_type, 
-                #                    [inputs.phrase_dimension, inputs.word_dimension])
-                #self.placeholder_y = tf.placeholder(params.data_type, 
-                #[inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension])
-
-                #x = tf.reshape(self._x, [inputs.phrase_count, -1]) #Define sequence length of
-                #x = tf.split(0, inputs.phrase_count, self._x)         # RNN input - "unroll" the network
-                #x = [tf.squeeze(_x, [0]) for _x in x]
-
+                    
             with tf.variable_scope("Input_Layer"):
                 with tf.device("/cpu:0"):
-                    #embedding = tf.get_variable(
-                    #    "embedding", [inputs.word_dimension, params.layer_size], dtype=params.data_type)
                     embedding = tf.get_variable("embedding", 
                             [inputs.phrase_dimension, params.layer_size], dtype=params.data_type)
                     phraseEmbedding = tf.nn.embedding_lookup(embedding, self._x)
-                #phraseEmbedding = [tf.squeeze(input_step, [0])
-                #    for input_step in tf.split(0, inputs.phrase_count, phraseEmbedding)]
-                code.interact(local=dict(globals(), **locals()))
                 phraseEmbedding = [tf.squeeze(input_step, [0])
                     for input_step in tf.split(0, inputs.phrase_dimension, phraseEmbedding)]
-                code.interact(local=dict(globals(), **locals()))
 
             # Define an lstm cell with tensorflow
             lstm_cell = rnn_cell.BasicLSTMCell(
@@ -211,49 +184,31 @@ class LSTMNet(object):
             layer_cell = rnn_cell.MultiRNNCell(
                 [lstm_cell] * params.num_layers, state_is_tuple=True)
 
-            with tf.name_scope("Initial_State"):
-                # Save a snapshot of the initial state for generating sequences later
-                #self._initial_state = layer_cell.zero_state(inputs.batch_size, params.data_type)
-                self._initial_state = layer_cell.zero_state(
+            self._initial_state = layer_cell.zero_state(
                     inputs.word_dimension, params.data_type)
             
             #code.interact(local=dict(globals(), **locals()))
             outputs, state = rnn.rnn(
                 layer_cell, phraseEmbedding, 
                 initial_state = self._initial_state, dtype=params.data_type)
-            code.interact(local=dict(globals(), **locals()))
 
-            with tf.name_scope("Final_State"):
-                #Used as recurrent input to LSTM layers during sequence generation
-                #Represents (c, h) values for params.num_layer of stacked LSTM cells
-                #(Given as 'unrolled' representation) - Also used as input to model by determining
-                # value of outputs[-1] - therefore directly used to compute probabilities
-                self._final_state = state
-
-            # Define weights according to dimensionality of hidden layers
-            # Randomly initializing weights and biases ensures feature differentiation
-            #weights = {
-            #    'out': tf.Variable(tf.random_normal([params.layer_size, inputs.word_dimension]))}
-            #biases = {'out': tf.Variable(tf.random_normal([inputs.word_dimension]))}
-
+            #Concatenate MultiRNN output states to create Output layer
             with tf.variable_scope("Output_Layer"):
-
+                output = tf.reshape(tf.concat(1, outputs), [-1, params.layer_size])
+                self._final_state = state
+                
                 with tf.variable_scope("Squash"):
-                    weights = {
-                        'out': tf.Variable(tf.random_normal([params.layer_size, 1]))}
-                    biases = {'out': tf.Variable(tf.random_normal([inputs.word_dimension]))}
+                    # Randomly initializing weights and biases ensures feature differentiation
+                    weights = tf.Variable(tf.random_normal([params.layer_size, 1]))
+                    #weights = tf.Variable(tf.random_normal(
+                    #    [params.layer_size, inputs.word_dimension]))
+                    biases = tf.Variable(tf.random_normal([inputs.word_dimension]))
 
-                    #outputs [-1] represents the final cell in the LSTM block, given as batch_size
-                    #of tensors for handling output
-                    #Output in LSTM is a function of the cell state (c) and the hidden state (h)
-                    #See LSTMStateTuple output of rnn_cell.BasicLSTMCell (state)
-
-                    #This represents the model we apply to the LSTM cell layer
-                    #This reconciles the dimensionality of hidden features (layer_size) and LSTM states
-                    #with dimensionality of our sequence (phrase_dim, word_dim)
-                    #Returns sequence predictions - These values are used for classification
-                    self._model =  tf.add(tf.squeeze(
-                        tf.matmul(outputs[-1], weights['out'])), biases['out'])
+                    prod = tf.matmul(output, weights)
+                    self._model = tf.reshape(
+                        prod, [inputs.phrase_dimension, inputs.word_dimension]) + biases 
+                    #self._model =  tf.add(tf.squeeze(
+                    #    tf.matmul(outputs[-1], weights['out'])), biases['out'])
                     #self._model =  tf.mul(outputs[-1], weights['out']) + biases['out']
 
                     #self.probabilities is the final layer of the network
@@ -270,13 +225,12 @@ class LSTMNet(object):
                     #     dtype=params.data_type)] * inputs.batch_size
                     #self._cost = tf.reduce_mean(
                     #tf.nn.seq2seq.sequence_loss(logits,targets,weights))
-
+                    code.interact(local=dict(globals(), **locals()))
                     #I don't know what this does. Some variant of backpropagation
                     self.globalStep = tf.Variable(0, name='global_step', trainable=False)
                     self._optimizer = tf.train.AdamOptimizer(
                         learning_rate=params.learning_rate).minimize(
                             self._cost, global_step=self.globalStep)
-                    #code.interact(local=dict(globals(), **locals()))
 
     def train_network(self):
         initializer = tf.initialize_all_variables()
@@ -303,14 +257,11 @@ class LSTMNet(object):
         print ("Epoch: ", self.epochs)
         #code.interact(local=dict(globals(), **locals()))
         for step in range(self.training_iterations):
-            print (step)
-            #phrases, captions = self.next_batch()
-            #train_dict = {self._x: phrases, self._y: captions}                
             train_dict = {}
             for i, (c, h) in enumerate(self.initial_state): #fails, placeholders are empty 
                 train_dict[c] = state[i].c
                 train_dict[h] = state[i].h
-            #code.interact(local=dict(globals(), **locals()))  
+            
             vals = session.run(fetches, train_dict)
             #Equivalent to:                         Against input x, y (phrases, captions)
             '''session.run(self.final_state, train_dict) #Compute probability distribution
@@ -318,7 +269,7 @@ class LSTMNet(object):
             session.run(self.cost, train_dict)        #Calculate loss
             code.interact(local=dict(globals(), **locals()))
             session.run(self.optimizer, train_dict)   #Update weights by backpropagation'''
-            
+            code.interact(local=dict(globals(), **locals()))
             cost = vals["cost"]
             state = vals["final_state"]
             costs += cost

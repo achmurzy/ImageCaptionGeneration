@@ -116,20 +116,21 @@ def ptb_producer(raw_phrase_data, raw_caption_data, batch_size, phrase_count, ph
 
     raw_caption_data = tf.convert_to_tensor(raw_caption_data, name="raw_captions", dtype=tf.int32)
     caption_data_len = tf.size(raw_caption_data)
-    caption_batch_len = caption_data_len // phrase_length
+    #caption_batch_len = caption_data_len // phrase_length
     #caption_data = tf.reshape(raw_caption_data[0: phrase_length * caption_batch_len],
     #                          [phrase_length, caption_batch_len])
-    caption_data = tf.reshape(raw_caption_data[0: phrase_length * caption_batch_len],
-                              [phrase_length * caption_batch_len])
-    code.interact(local=dict(globals(), **locals()))                          
+    caption_data = tf.reshape(raw_caption_data[0: phrase_length * lexDim],
+                              [phrase_length,  lexDim])
+               
+               
     #Iteratively dequeues integers in the range of iterations of an epoch 
     i = tf.train.range_input_producer(epoch_size, shuffle=False).dequeue()
 
     #Accesses data by slicing with the asynchronously updated epoch index
     #x = tf.slice(data, [0, i * phrase_length, 0], [phrase_count, phrase_length, lexDim])
-    x = tf.slice(data, [0, i * phrase_length], [phrase_length, lexDim])
-    #y = tf.slice(caption_data, [0, 0], [phrase_length, lexDim])
-    y = tf.slice(caption_data, [i * phrase_length], [lexDim])
+    x = tf.slice(data, [i * phrase_length, 0], [phrase_length, lexDim])
+    #y = tf.slice(caption_data, [i * phrase_length, 0], [phrase_length, lexDim])
+    y = tf.slice(caption_data, [i * phrase_length, 0], [phrase_length, lexDim])
 
     print ("At reader")
     code.interact(local=dict(globals(), **locals()))
