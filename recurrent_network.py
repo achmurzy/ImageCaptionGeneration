@@ -39,7 +39,7 @@ class NetworkInput(object):
     def captions(self, value):
         self.caption_batch = value
 
-    def __init__(self, batchSize, phraseCount, phraseDim, wordDim, phraseBatch, captionBatch, numEpochs, inputImgLength):
+    def __init__(self, batchSize, phraseCount, phraseDim, wordDim, phraseBatch, captionBatch, numEpochs, epochSize):
         self.phrase_count = phraseCount
         self.phrase_dimension = phraseDim
         self.word_dimension = wordDim
@@ -47,7 +47,7 @@ class NetworkInput(object):
         #               np.asarray(inputs[1], dtype=np.float32)] 
         self.batch_size = batchSize
         self.num_epochs = numEpochs
-        self.data_size = inputImgLength
+        self.epoch_size = epochSize
         self.phrase_batch = phraseBatch
         self.caption_batch = captionBatch
         
@@ -144,11 +144,11 @@ class LSTMNet(object):
     def encoder(self):
         return self._encoder
 
-    @property 
-    def training_iterations(self):
-        return self.inputs.data_size / self.inputs.batch_size
-    #def training_iterations(self, session):
-    #    return self.inputs.epoch_size.eval(session=session)
+    #@property 
+    #def training_iterations(self):
+    #    return self.inputs.data_size / self.inputs.batch_size
+    def training_iterations(self, session):
+        return self.inputs.epoch_size.eval(session=session)
 
     def __init__(self, inputs, params, results, codex):
         with tf.variable_scope("Model", reuse=None):
@@ -167,10 +167,12 @@ class LSTMNet(object):
             #####################Build the LSTM network#############################
 
             with tf.variable_scope("Inputs"):
-                self.placeholder_x = self.inputs.phrases
-                self.placeholder_y = self.inputs.captions
+                self.placeholder_x = tf.placeholder_with_default(
+                    self.inputs.phrases, self.inputs.phrases.get_shape())
+                self.placeholder_y = tf.placeholder_with_default(
+                    self.inputs.captions, self.inputs.captions.get_shape()) 
                     
-            with tf.variable_scope("Input_Layer"):
+            with tf.variable_scope("Embedding_Layer"):
                 with tf.device("/cpu:0"):
                     embedding = tf.get_variable("embedding", 
                             [inputs.phrase_dimension, params.layer_size], dtype=params.data_type)
@@ -244,8 +246,7 @@ class LSTMNet(object):
             session.run(initializer)
             while self.epochs <= self.inputs.num_epochs:
                 self.run_epoch(session)
-        #with tf.Session() as session:
-        #    print(self.sample(session))  # -- get caption
+                print(self.sample(session))  # -- get caption
         self.results.plot_results()
 
     def run_epoch(self, session):
@@ -256,12 +257,12 @@ class LSTMNet(object):
                        "eval_op":self.optimizer}
         print ("Epoch: ", self.epochs)
         #code.interact(local=dict(globals(), **locals()))
-        for step in range(self.training_iterations):
+        for step in range(self.training_iterations(session)):
             train_dict = {}
-            for i, (c, h) in enumerate(self.initial_state): #fails, placeholders are empty 
+            for i, (c, h) in enumerate(self.initial_state):  
                 train_dict[c] = state[i].c
                 train_dict[h] = state[i].h
-            
+            #code.interact(local=dict(globals(), **locals()))
             vals = session.run(fetches, train_dict)
             #Equivalent to:                         Against input x, y (phrases, captions)
             '''session.run(self.final_state, train_dict) #Compute probability distribution
@@ -269,7 +270,7 @@ class LSTMNet(object):
             session.run(self.cost, train_dict)        #Calculate loss
             code.interact(local=dict(globals(), **locals()))
             session.run(self.optimizer, train_dict)   #Update weights by backpropagation'''
-            code.interact(local=dict(globals(), **locals()))
+            
             cost = vals["cost"]
             state = vals["final_state"]
             costs += cost
@@ -277,62 +278,32 @@ class LSTMNet(object):
         if self.epochs % self.results.display_step == 0:
             self.results.record_point(self.epochs, costs)
         self.epochs += 1
-        print(self.globalStep.eval(session))
         return np.exp(costs)
 
     def sample(self, session, seed = '\''):
-        state = session.run(self.initial_state)  #See constructor - tensor of 0's
-        #placeholder_x = tf.placeholder(tf.int32, 
-        #                                   [self.inputs.phrase_dimension, self.inputs.word_dimension])
+        state = session.run(self.initial_state)  
         ret = seed
         char = ret
-        code.interact(local=dict(globals(), **locals()))
+
         x = np.zeros((self.inputs.phrase_dimension, self.inputs.word_dimension))
-        #x = np.zeros((self.inputs.phrase_count, 
-        #              self.inputs.phrase_dimension, self.inputs.word_dimension))
-        print ("loopin")
-        x[0, 0] = self.encoder[char]
-        feed = {self._x: x, self.initial_state:state}
-        [state] = session.run([self.final_state], feed)
-        code.interact(local=dict(globals(), **locals()))
+        #x[0, 0] = self.encoder[char]
+        #code.interact(local=dict(globals(), **locals()))
+        #feed = {self._x: x, self.initial_state:state}
+        #[state] = session.run([self.final_state], feed)
+
         #Seed state is trained network on <START> = '\''
-        
         num = self.inputs.phrase_dimension #For now, fixed length captions
         for n in range(num):              #Ideally this loop is 'until generate <STOP>'
             x = np.zeros((self.inputs.phrase_dimension, self.inputs.word_dimension))
-            #x = np.zeros((self.inputs.phrase_count, 
-            #              self.inputs.phrase_dimension, self.inputs.word_dimension))
-
-            x[0, 0] = self.encoder[char]
+            #x[0, 0] = self.encoder[char]
             feed = {self._x: x, self.initial_state:state}
+
             [probs, state] = session.run([self.probabilities, self.final_state], feed)
-            #p = probs[0]                #We only sample the next word in the sequence   
-            p = probs
+            p = probs[n]                #We only sample the next word in the sequence   
             sample = np.argmax(p)          #We can write more complicated sampling functions
             pred = self.decoder[sample]
             ret += pred
             char = pred
-            
-        return ret
-
-    #Retrieve next set of examples based on batch size - or right now, phraseCount
-    def next_batch(self):
-        start = self.epoch_iteration
-        self.epoch_iteration += self.inputs.batch_size
-        end = self.epoch_iteration
-        phrase_batch = self.inputs.phrases[start:end]
-        caption_batch = self.inputs.captions[start:end]
-    
-        if(self.epoch_iteration >= self.inputs.data_size):
-            self.epoch_iteration = 0
-            #Google has it shuffling inputs here          Could affect prediction/classification?
-            #to avoid fitting the order of images in the training set?
             #code.interact(local=dict(globals(), **locals()))
-            shuffleIndices = np.arange(self.data_size)
-            np.random.shuffle(shuffleIndices)
-            self.inputs.phrases = self.inputs.phrases[shuffleIndices]
-            self.inputs.captions = self.inputs.captions[shuffleIndices]
-
-        return phrase_batch[0], caption_batch[0]
-        
+        return ret
         
