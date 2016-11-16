@@ -73,7 +73,7 @@ code.interact(local=dict(globals(), **locals()))
 #code.interact(local=dict(globals(), **locals()))
 import reader
 batchedPhrases, batchedCaptions, epochSize = reader.ptb_producer(
-flatPhrases, flatCaptions, phraseCount, phraseLength, LEX_DIM)
+flatPhrases, flatCaptions, batch_size, phraseCount, phraseLength, LEX_DIM)
 code.interact(local=dict(globals(), **locals()))
 
 #inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs)
