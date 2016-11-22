@@ -54,7 +54,7 @@ def flatten(listOfLists):
 # Network Parameters 
 n_hidden = 64 # hidden layer num of features (# of 'neurons')
 n_layers = 1 # number of stacked layers - should equal number of phrases (so batch size?)
-learning_rate = 0.05 # SGD magnitude
+learning_rate = 0.001 # SGD magnitude
 initializationScale = 0.1 # scale of weight intializations
 
 # Input Parameters
@@ -85,7 +85,7 @@ flatPhrases = dp.extract_flat_phrase_vectors(
 flatCaptions = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, invertDict, captions)'''
 
 flatPhraseIDs = dp.extract_phrase_id_vectors(phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
-flatCaptionIDs = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, invertDict, captions)
+flatCaptionIDs = dp.extract_caption_id_vectors(phraseLength, inputImgCount, invertDict, captions)
 
 import reader
 #batchedPhrases, batchedCaptions, epochSize = reader.ptb_producer(
