@@ -36,10 +36,11 @@ dp.build_lookup_lexicon(lex, wordDict, invertDict)
 ###########DENSECAP PHRASE EXTRACTION######################
 #Use if images need re-processing by densecap
 #Run as python caption_generation.py 1
-#if(len(sys.argv) > 1):
-#processImages = int(sys.argv[1])
-#if(processImages):
-#dp.coco_to_densecap(imgIDs)
+if(len(sys.argv) > 1):
+    processImages = int(sys.argv[1])
+    read = int(sys.argv[2])
+if(processImages):
+    dp.coco_to_densecap(imgIDs)
 
 #Get densecap results
 results = dp.json_to_dict("results/results.json")
@@ -84,18 +85,42 @@ flatPhrases = dp.extract_flat_phrase_vectors(
     phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
 flatCaptions = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, invertDict, captions)'''
 
-flatPhraseIDs = dp.extract_phrase_id_vectors(phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
-flatCaptionIDs = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, invertDict, captions)
 
-import reader
-#batchedPhrases, batchedCaptions, epochSize = reader.ptb_producer(
-#flatPhrases, flatCaptions, batch_size, phraseCount, phraseLength, LEX_DIM)
-batchedPhrases, batchedCaptions, epochSize = reader.ptb_id_producer(
-flatPhraseIDs, flatCaptionIDs, batch_size, phraseLength)
 
-#inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs)
-inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, batchedPhrases, batchedCaptions, num_epochs, epochSize)
-params = rn.NetworkParameters(n_hidden, n_layers, learning_rate, initializationScale)
-results = rn.NetworkResults(display_step) 
-ann = rn.LSTMNet(inputs, params, results, [wordDict, invertDict])
-ann.train_network()
+if read:
+
+    phraseFile = open("phrases", 'r')
+    flatPhraseIDs = dp.load_phrases_or_captions(phraseFile)
+    
+    capFile = open("caps", 'r')
+    flatCaptionIDs = dp.load_phrases_or_captions(capFile)
+
+    import reader
+    #batchedPhrases, batchedCaptions, epochSize = reader.ptb_producer(
+    #flatPhrases, flatCaptions, batch_size, phraseCount, phraseLength, LEX_DIM)
+    batchedPhrases, batchedCaptions, epochSize = reader.ptb_id_producer(
+    flatPhraseIDs, flatCaptionIDs, batch_size, phraseLength)
+
+    #inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs)
+    inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, batchedPhrases, batchedCaptions, num_epochs, epochSize)
+    params = rn.NetworkParameters(n_hidden, n_layers, learning_rate, initializationScale)
+    results = rn.NetworkResults(display_step) 
+    ann = rn.LSTMNet(inputs, params, results, [wordDict, invertDict])
+
+    ann.train_network()
+
+else:
+
+    flatPhraseIDs = dp.extract_phrase_id_vectors(phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
+    flatCaptionIDs = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, invertDict, captions)
+
+    phraseFile = open("phrases", 'w')
+    save_phrases_or_captions(flatPhraseIDs, phraseFile)
+    phraseFile.close()
+
+    capFile = open("caps", 'w')
+    save_phrases_or_captions(flatCaptionIDs, capFile)
+    capFile.close()
+
+
+

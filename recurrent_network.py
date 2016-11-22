@@ -14,7 +14,7 @@ from tensorflow.contrib.slim.python.slim import evaluation
 import numpy as np
 #from nltk import bleu_score
 import code
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 
 
 # To make input, we need to create a tensor
@@ -188,7 +188,7 @@ class LSTMNet(object):
                             [inputs.word_dimension, params.layer_size], dtype=params.data_type)
 
                     phraseEmbedding = tf.nn.embedding_lookup(embedding, self._x)
-                code.interact(local=dict(globals(), **locals()))
+                #code.interact(local=dict(globals(), **locals()))
                 phraseEmbedding = [tf.squeeze(input_step, [1])
                     for input_step in tf.split(1, inputs.phrase_dimension, phraseEmbedding)]
             
@@ -220,7 +220,7 @@ class LSTMNet(object):
             self._initial_state = layer_cell.zero_state(
                     inputs.batch_size, params.data_type)
 
-            code.interact(local=dict(globals(), **locals()))
+            #code.interact(local=dict(globals(), **locals()))
             outputs, state = rnn.rnn(
                 layer_cell, phraseEmbedding, 
                 initial_state = self._initial_state, dtype=params.data_type)
@@ -229,7 +229,7 @@ class LSTMNet(object):
              #   layer_cell, phraseEmbedding, 
               #    dtype=params.data_type)
             
-            code.interact(local=dict(globals(), **locals()))
+            #code.interact(local=dict(globals(), **locals()))
             #Concatenate MultiRNN output states to create Output layer
             with tf.variable_scope("Output_Layer"):
                 output = tf.reshape(tf.concat(1, outputs), [-1, params.layer_size])
@@ -268,7 +268,7 @@ class LSTMNet(object):
                     self._cost = tf.reduce_mean(
                         tf.nn.seq2seq.sequence_loss(logits,targets,weights)) / inputs.batch_size
                     
-                    code.interact(local=dict(globals(), **locals()))
+                    #code.interact(local=dict(globals(), **locals()))
                     #I don't know what this does. Some variant of backpropagation
                     self.globalStep = tf.Variable(0, name='global_step', trainable=False)
                     self._optimizer = tf.train.AdamOptimizer(
@@ -288,7 +288,7 @@ class LSTMNet(object):
             while self.epochs <= self.inputs.num_epochs:
                 self.run_epoch(session)
                 #print(self.sample(session))  # -- get caption
-        self.results.plot_results()
+        #self.results.plot_results()
 
     def run_epoch(self, session):
         """Runs the model on the given data."""

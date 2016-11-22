@@ -180,6 +180,6 @@ def ptb_id_producer(raw_phrase_data, raw_caption_data, batch_size, phrase_length
     x = tf.slice(data, [i*batch_size, 0], [batch_size, phrase_length])
     y = tf.slice(caption_data, [i*batch_size, 0], [batch_size, phrase_length])
 
-    print ("At reader")
-    code.interact(local=dict(globals(), **locals()))
+    #print ("At reader")
+    #code.interact(local=dict(globals(), **locals()))
     return x, y, epoch_size
