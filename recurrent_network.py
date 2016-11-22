@@ -172,28 +172,64 @@ class LSTMNet(object):
                 self.placeholder_y = tf.placeholder_with_default(
                     self.inputs.captions, self.inputs.captions.get_shape()) 
                     
+            #Embedding layer transforms one-hot vectors to real-valued inputs for learning
+            #Necessary for later matmul computations anyways
+
             with tf.variable_scope("Embedding_Layer"):
                 with tf.device("/cpu:0"):
-                    embedding = tf.get_variable("embedding", 
-                            [inputs.phrase_dimension, params.layer_size], dtype=params.data_type)
-                    phraseEmbedding = tf.nn.embedding_lookup(embedding, self._x)
-                phraseEmbedding = [tf.squeeze(input_step, [0])
-                    for input_step in tf.split(0, inputs.phrase_dimension, phraseEmbedding)]
+                    #embedding = tf.get_variable("embedding", 
+                    #        [inputs.phrase_dimension, params.layer_size], dtype=params.data_type)
+                    
+                    #Make embedding[inputs.word_dimension, params.layer_size] 
+                    #Split input along phrase dimension for [batch_size, word_dimension]
+                    #matmul by embeddings to get [batch_size, params.layer_size]
 
+                    embedding = tf.get_variable("embedding", 
+                            [inputs.word_dimension, params.layer_size], dtype=params.data_type)
+
+                    phraseEmbedding = tf.nn.embedding_lookup(embedding, self._x)
+                code.interact(local=dict(globals(), **locals()))
+                phraseEmbedding = [tf.squeeze(input_step, [1])
+                    for input_step in tf.split(1, inputs.phrase_dimension, phraseEmbedding)]
+            
+            #Is this complete nonsense? Investigate the 'linear' function 
+            #that makes us use 2D tensors as input to the RNN
+                #phraseEmbedding = [tf.reshape(input_step, [-1, params.layer_size])
+                #    for input_step in phraseEmbedding]
+                #phraseEmbedding = [tf.reshape(input_step, [inputs.batch_size, -1])
+                #    for input_step in phraseEmbedding]
+            
+            '''hidden_weights = tf.Variable(
+                tf.random_normal([inputs.word_dimension, params.layer_size]))
+            hidden_input = tf.matmul(self._x, hidden_weights)
+            
+            phraseEmbedding = [tf.squeeze(input_step, [1])
+                               for input_step in tf.split(
+                                       1, inputs.phrase_dimension, hidden_input)]'''
+            
             # Define an lstm cell with tensorflow
             lstm_cell = rnn_cell.BasicLSTMCell(
                 params.layer_size, forget_bias=1.0, state_is_tuple=True)
             layer_cell = rnn_cell.MultiRNNCell(
                 [lstm_cell] * params.num_layers, state_is_tuple=True)
 
+            #self._initial_state = layer_cell.zero_state(
+            #        inputs.word_dimension, params.data_type)
+            #self._initial_state = layer_cell.zero_state(
+            #        inputs.batch_size * inputs.word_dimension, params.data_type)
             self._initial_state = layer_cell.zero_state(
-                    inputs.word_dimension, params.data_type)
-            
-            #code.interact(local=dict(globals(), **locals()))
+                    inputs.batch_size, params.data_type)
+
+            code.interact(local=dict(globals(), **locals()))
             outputs, state = rnn.rnn(
                 layer_cell, phraseEmbedding, 
                 initial_state = self._initial_state, dtype=params.data_type)
 
+            #outputs, state = rnn.rnn(
+             #   layer_cell, phraseEmbedding, 
+              #    dtype=params.data_type)
+            
+            code.interact(local=dict(globals(), **locals()))
             #Concatenate MultiRNN output states to create Output layer
             with tf.variable_scope("Output_Layer"):
                 output = tf.reshape(tf.concat(1, outputs), [-1, params.layer_size])
@@ -201,32 +237,37 @@ class LSTMNet(object):
                 
                 with tf.variable_scope("Squash"):
                     # Randomly initializing weights and biases ensures feature differentiation
-                    weights = tf.Variable(tf.random_normal([params.layer_size, 1]))
-                    #weights = tf.Variable(tf.random_normal(
-                    #    [params.layer_size, inputs.word_dimension]))
+                    #weights = tf.Variable(tf.random_normal([params.layer_size, 1]))
+                    
+                    weights = tf.Variable(tf.random_normal(
+                        [params.layer_size, inputs.word_dimension]))
                     biases = tf.Variable(tf.random_normal([inputs.word_dimension]))
 
-                    prod = tf.matmul(output, weights)
-                    self._model = tf.reshape(
-                        prod, [inputs.phrase_dimension, inputs.word_dimension]) + biases 
-                    #self._model =  tf.add(tf.squeeze(
-                    #    tf.matmul(outputs[-1], weights['out'])), biases['out'])
-                    #self._model =  tf.mul(outputs[-1], weights['out']) + biases['out']
+                    self._model = tf.matmul(output, weights) + biases
 
+                    #prod = tf.matmul(output, weights)
+                    #self._model = tf.reshape(
+                    #    prod, [inputs.phrase_dimension, inputs.word_dimension]) + biases 
+                    
+                    #self._model = tf.reshape(prod, 
+                    #[inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension]) + biases 
+                    
                     #self.probabilities is the final layer of the network
                     #squash all predictions into range 0->1 for sane inference 
                     self._probs = tf.nn.softmax(self._model)
 
                 with tf.variable_scope("Backpropagation"):
-                    self._cost = tf.reduce_mean(
-                        tf.nn.softmax_cross_entropy_with_logits(self._model, self._y))
-                    #logits = tf.split(0, inputs.batch_size, tf.reshape(
-                    #                self._x, [inputs.batch_size, -1]))
-                    #targets = [self._y] * inputs.batch_size
-                    #weights = [tf.ones(self.inputs.batch_size * inputs.word_dimension, 
-                    #     dtype=params.data_type)] * inputs.batch_size
                     #self._cost = tf.reduce_mean(
-                    #tf.nn.seq2seq.sequence_loss(logits,targets,weights))
+                    #    tf.nn.softmax_cross_entropy_with_logits(self._model, self._y))
+                    
+                    logits = [self._model]
+                    targets = [tf.reshape(self._y, [-1])]
+                    weights = [tf.ones([inputs.batch_size * inputs.phrase_dimension], 
+                         dtype=params.data_type)]
+
+                    self._cost = tf.reduce_mean(
+                        tf.nn.seq2seq.sequence_loss(logits,targets,weights)) / inputs.batch_size
+                    
                     code.interact(local=dict(globals(), **locals()))
                     #I don't know what this does. Some variant of backpropagation
                     self.globalStep = tf.Variable(0, name='global_step', trainable=False)
@@ -246,7 +287,7 @@ class LSTMNet(object):
             session.run(initializer)
             while self.epochs <= self.inputs.num_epochs:
                 self.run_epoch(session)
-                print(self.sample(session))  # -- get caption
+                #print(self.sample(session))  # -- get caption
         self.results.plot_results()
 
     def run_epoch(self, session):
@@ -256,21 +297,15 @@ class LSTMNet(object):
         fetches = {"cost": self.cost, "final_state": self.final_state, 
                        "eval_op":self.optimizer}
         print ("Epoch: ", self.epochs)
-        #code.interact(local=dict(globals(), **locals()))
         for step in range(self.training_iterations(session)):
             train_dict = {}
             for i, (c, h) in enumerate(self.initial_state):  
                 train_dict[c] = state[i].c
                 train_dict[h] = state[i].h
             #code.interact(local=dict(globals(), **locals()))
-            vals = session.run(fetches, train_dict)
-            #Equivalent to:                         Against input x, y (phrases, captions)
-            '''session.run(self.final_state, train_dict) #Compute probability distribution
-            code.interact(local=dict(globals(), **locals()))
-            session.run(self.cost, train_dict)        #Calculate loss
-            code.interact(local=dict(globals(), **locals()))
-            session.run(self.optimizer, train_dict)   #Update weights by backpropagation'''
             
+            vals = session.run(fetches, train_dict)
+             
             cost = vals["cost"]
             state = vals["final_state"]
             costs += cost
@@ -278,6 +313,7 @@ class LSTMNet(object):
         if self.epochs % self.results.display_step == 0:
             self.results.record_point(self.epochs, costs)
         self.epochs += 1
+        
         return np.exp(costs)
 
     def sample(self, session, seed = '\''):

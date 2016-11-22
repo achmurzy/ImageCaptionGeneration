@@ -58,7 +58,7 @@ learning_rate = 0.05 # SGD magnitude
 initializationScale = 0.1 # scale of weight intializations
 
 # Input Parameters
-batch_size = 1 # of images to show per training iteration
+batch_size = 2 # of images to show per training iteration
 phraseCount = 1 # of densecap phrases to use in tensor input per epoch
 phraseLength = 5 # of words per phrase. This will become a function of phrase inputs
 LEX_DIM = (len(wordDict))
@@ -79,14 +79,19 @@ flatPhrases = phrases
 flatCaptions = flatten(captions)
 flatCaptions = flatten(flatCaptions)
 for x in xrange(0, 2):
-    flatPhrases = flatten(flatPhrases)'''
+    flatPhrases = flatten(flatPhrases)
 flatPhrases = dp.extract_flat_phrase_vectors(
     phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
-flatCaptions = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, invertDict, captions)
+flatCaptions = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, invertDict, captions)'''
+
+flatPhraseIDs = dp.extract_phrase_id_vectors(phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
+flatCaptionIDs = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, invertDict, captions)
 
 import reader
-batchedPhrases, batchedCaptions, epochSize = reader.ptb_producer(
-flatPhrases, flatCaptions, batch_size, phraseCount, phraseLength, LEX_DIM)
+#batchedPhrases, batchedCaptions, epochSize = reader.ptb_producer(
+#flatPhrases, flatCaptions, batch_size, phraseCount, phraseLength, LEX_DIM)
+batchedPhrases, batchedCaptions, epochSize = reader.ptb_id_producer(
+flatPhraseIDs, flatCaptionIDs, batch_size, phraseLength)
 
 #inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs)
 inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, batchedPhrases, batchedCaptions, num_epochs, epochSize)

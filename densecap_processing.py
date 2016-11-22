@@ -150,10 +150,6 @@ def extract_phrase_vectors(phrase_count, phraseLength, imgCount, phraseCap, imag
             count = 0
             print ("Phrase ", phrase)
             for word in phrase.split():
-                print word
-                print x
-                print phraseI
-                print count
                 if count >= phraseLength:
                     print "Break phrase"
                     break
@@ -179,7 +175,7 @@ def extract_phrase_vectors(phrase_count, phraseLength, imgCount, phraseCap, imag
 
 def extract_flat_phrase_vectors(phrase_count, phraseLength, imgCount, phraseCap, image_props, invertDict):
     one_hot_list = []
-    print one_hot_list
+    #print one_hot_list
     img_ids = sorted(phraseCap.keys())
     for x in range(0, imgCount):
         salient = salience.salient_phrases(image_props, phraseCap[img_ids[x]], 
@@ -194,19 +190,71 @@ def extract_flat_phrase_vectors(phrase_count, phraseLength, imgCount, phraseCap,
                     break
                 elif word in invertDict:
                     one_hot_list.extend(string_to_vector(word, invertDict))
-                    print "Add word: ", string_to_vector(word, invertDict)
+                    #print "Add word: ", string_to_vector(word, invertDict)
                 else:
-                    print "Fill void: ", empty_one_hot_vector(len(invertDict))
+                    #print "Fill void: ", empty_one_hot_vector(len(invertDict))
                     one_hot_list.extend(empty_one_hot_vector(len(invertDict)))
                 count = count + 1
             while count < phraseLength:  #Padding
-                print "Pad: ", empty_one_hot_vector(len(invertDict))
+                #print "Pad: ", empty_one_hot_vector(len(invertDict))
                 one_hot_list.extend(empty_one_hot_vector(len(invertDict)))
                 count = count + 1
             phraseI = phraseI + 1
-    print "Full Phrases: \n", one_hot_list
+    #print "Full Phrases: \n", one_hot_list
     return one_hot_list
 
+def extract_flat_phrase_vectors(phrase_count, phraseLength, imgCount, phraseCap, image_props, invertDict):
+    one_hot_list = []
+    #print one_hot_list
+    img_ids = sorted(phraseCap.keys())
+    for x in range(0, imgCount):
+        salient = salience.salient_phrases(image_props, phraseCap[img_ids[x]], 
+                lambda: salience.k_top_scores(image_props[phraseCap[img_ids[x]]], phrase_count))
+        phraseI = 0
+        for phrase in salient:
+            count = 0
+            print ("Phrase ", phrase)
+            for word in phrase.split():
+                if count >= phraseLength:
+                    print "Break phrase"
+                    break
+                elif word in invertDict:
+                    one_hot_list.extend(string_to_vector(word, invertDict))
+                    #print "Add word: ", string_to_vector(word, invertDict)
+                else:
+                    #print "Fill void: ", empty_one_hot_vector(len(invertDict))
+                    one_hot_list.extend(empty_one_hot_vector(len(invertDict)))
+                count = count + 1
+            while count < phraseLength:  #Padding
+                #print "Pad: ", empty_one_hot_vector(len(invertDict))
+                one_hot_list.extend(empty_one_hot_vector(len(invertDict)))
+                count = count + 1
+            phraseI = phraseI + 1
+    #print "Full Phrases: \n", one_hot_list
+    return one_hot_list
+
+def extract_phrase_id_vectors(phrase_count, phraseLength, imgCount, phraseCap, image_props, invertDict):
+    id_list = []
+    img_ids = sorted(phraseCap.keys())
+    for x in range(0, imgCount):
+        salient = salience.salient_phrases(image_props, phraseCap[img_ids[x]], 
+                lambda: salience.k_top_scores(image_props[phraseCap[img_ids[x]]], phrase_count))
+        for phrase in salient:
+            count = 0
+            print ("Phrase ", phrase)
+            for word in phrase.split():
+                if count >= phraseLength:
+                    break
+                elif word in invertDict:
+                    id_list.append(invertDict[word])
+                else:
+                    id_list.append(len(invertDict)-1)
+                count = count + 1
+            while count < phraseLength:  
+                id_list.append(len(invertDict)-1)
+                count = count + 1
+    print "Full Phrases: \n", id_list
+    return id_list
 
 #Remember that one day we will need to generalize this yet again for captionCount
 #But it is not this day
@@ -259,3 +307,24 @@ def extract_flat_caption_vectors(phraseLength, imgCount, invertDict, captions):
                 count = count + 1
         imgID = imgID + 1
     return one_hot_list
+
+def extract_caption_id_vectors(phraseLength, imgCount, invertDict, captions):
+    id_list = []
+    imgID = 0
+    for cap in sorted(captions):
+        for caption in captions[cap]:
+            print ("Caption ", caption)
+            count = 0
+            for word in re.split('[(\'\.\s)]', caption): 
+                if count >= phraseLength:
+                    break
+                elif word in invertDict:
+                    id_list.append(invertDict[word])
+                else:
+                    id_list.append(len(invertDict)-1)
+                count = count + 1
+            while count < phraseLength:    #Padding
+                id_list.append(len(invertDict)-1)
+                count = count + 1
+        imgID = imgID + 1
+    return id_list

@@ -100,16 +100,64 @@ def ptb_producer(raw_phrase_data, raw_caption_data, batch_size, phrase_count, ph
   with tf.name_scope("PTBProducer"):
     raw_phrase_data = tf.convert_to_tensor(raw_phrase_data, name="raw_data", dtype=tf.int32)
     data_len = tf.size(raw_phrase_data)
+
+    batch_len = (batch_size * phrase_length * lexDim)
+    epoch_size = (data_len) // (batch_len)
+
+    #input_imgs = data_len // (phrase_length * lexDim)
+    #data = tf.reshape(raw_phrase_data[0 : data_len],
+    #                 [input_imgs, phrase_length, lexDim])
+
+    #batch_len = data_len // (batch_size * phrase_length * lexDim)
+    data = tf.reshape(raw_phrase_data[0 : epoch_size * batch_len],
+                      [epoch_size * batch_size, phrase_length, lexDim])
     
-    batch_len = (phrase_length * lexDim)
-    input_imgs = data_len // (batch_size * batch_len)
-    
-    #data = tf.reshape(raw_phrase_data[0 : phrase_count * batch_len],
-     #                 [phrase_count, phrase_length, lexDim])
-    data = tf.reshape(raw_phrase_data[0 : data_len],
-                      [input_imgs, phrase_length, lexDim])
-    
-    epoch_size = (data_len) // (batch_len) 
+     
+    ###epoch_size = batch_len // (phrase_length * lexDim)
+
+    assertion = tf.assert_positive(
+        epoch_size,
+        message="epoch_size == 0, decrease phrase_count or phrase_length")
+    with tf.control_dependencies([assertion]):
+      epoch_size = tf.identity(epoch_size, name="epoch_size")
+
+    raw_caption_data = tf.convert_to_tensor(raw_caption_data, name="raw_captions", dtype=tf.int32)
+    caption_data_len = tf.size(raw_caption_data)
+
+    #caption_data = tf.reshape(raw_caption_data[0: caption_data_len],
+    #                          [inputs_imgs, phrase_length,  lexDim])
+
+    caption_data = tf.reshape(raw_caption_data[0: epoch_size * batch_len],
+                              [epoch_size * batch_size, phrase_length,  lexDim])
+               
+               
+    #Iteratively dequeues integers in the range of iterations of an epoch 
+    epoch_queue = tf.train.range_input_producer(epoch_size, shuffle=False)
+    i = epoch_queue.dequeue()
+    #Accesses data by slicing with the asynchronously updated epoch index
+
+    #x = tf.slice(data, [i, 0, 0], [batch_size, phrase_length, lexDim])
+    #x = tf.squeeze(x, [0])
+    x = tf.slice(data, [i*batch_size, 0, 0], [batch_size, phrase_length, lexDim])
+
+    #y = tf.slice(caption_data, [i, 0, 0], [batch_size, phrase_length, lexDim])
+    #y = tf.squeeze(y, [0])
+    y = tf.slice(caption_data, [i*batch_size, 0, 0], [batch_size, phrase_length, lexDim])
+
+    print ("At reader")
+    code.interact(local=dict(globals(), **locals()))
+    return x, y, epoch_size
+
+def ptb_id_producer(raw_phrase_data, raw_caption_data, batch_size, phrase_length, name=None):
+  
+  with tf.name_scope("PTB_id_Producer"):
+    raw_phrase_data = tf.convert_to_tensor(raw_phrase_data, name="raw_data", dtype=tf.int32)
+    data_len = tf.size(raw_phrase_data)
+
+    batch_len = (batch_size * phrase_length)
+    epoch_size = (data_len) // (batch_len)
+    data = tf.reshape(raw_phrase_data[0 : epoch_size * batch_len],
+                      [batch_size * epoch_size, phrase_length])
     
     assertion = tf.assert_positive(
         epoch_size,
@@ -120,25 +168,17 @@ def ptb_producer(raw_phrase_data, raw_caption_data, batch_size, phrase_count, ph
     raw_caption_data = tf.convert_to_tensor(raw_caption_data, name="raw_captions", dtype=tf.int32)
     caption_data_len = tf.size(raw_caption_data)
 
-    #caption_batch_len = caption_data_len // phrase_length
-    #caption_data = tf.reshape(raw_caption_data[0: phrase_length * caption_batch_len],
-    #                          [phrase_length, caption_batch_len])
-    caption_data = tf.reshape(raw_caption_data[0: caption_data_len],
-                              [input_imgs, phrase_length,  lexDim])
+    caption_data = tf.reshape(raw_caption_data[0: epoch_size * batch_len],
+                              [batch_size * epoch_size, phrase_length])
                
                
     #Iteratively dequeues integers in the range of iterations of an epoch 
     epoch_queue = tf.train.range_input_producer(epoch_size, shuffle=False)
     i = epoch_queue.dequeue()
+
     #Accesses data by slicing with the asynchronously updated epoch index
-
-    #x = tf.slice(data, [i * phrase_length, 0], [phrase_length, lexDim])
-    x = tf.slice(data, [i, 0, 0], [batch_size, phrase_length, lexDim])
-    x = tf.squeeze(x, [0])
-
-    #y = tf.slice(caption_data, [i * phrase_length, 0], [phrase_length, lexDim])
-    y = tf.slice(caption_data, [i, 0, 0], [batch_size, phrase_length, lexDim])
-    y = tf.squeeze(y, [0])
+    x = tf.slice(data, [i*batch_size, 0], [batch_size, phrase_length])
+    y = tf.slice(caption_data, [i*batch_size, 0], [batch_size, phrase_length])
 
     print ("At reader")
     code.interact(local=dict(globals(), **locals()))
