@@ -59,7 +59,7 @@ initializationScale = 0.1 # scale of weight intializations
 
 # Input Parameters
 batch_size = 2 # of images to show per training iteration
-phraseCount = 1 # of densecap phrases to use in tensor input per epoch
+phraseCount = 3 # of densecap phrases to use in tensor input per epoch
 phraseLength = 5 # of words per phrase. This will become a function of phrase inputs
 LEX_DIM = (len(wordDict))
 num_epochs = 100
