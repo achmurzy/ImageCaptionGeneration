@@ -329,12 +329,3 @@ def extract_caption_id_vectors(phraseLength, imgCount, invertDict, captions):
         imgID = imgID + 1
     return id_list
 
-############################## MOVING DATA #####################################
-
-import pickle
-def save_phrases_or_captions(words, dumpfile):
-    pickle.dump(words, dumpfile)
-
-def load_phrases_or_captions(infile):
-    words = pickle.load(infile)
-    return words
