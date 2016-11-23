@@ -4,9 +4,6 @@ gotta be bad to get good
 
 from __future__ import print_function
 
-import densecap_processing as dp
-import reader
-
 import tensorflow as tf
 from tensorflow.python.ops import rnn, rnn_cell
 from tensorflow.contrib.slim.python.slim import evaluation

@@ -77,7 +77,7 @@ def coco_to_densecap(imgIDs):
         print str(x) + " Executing: "+ command
         subprocess.call(command, shell=True)
     os.chdir("../densecap")
-    dense_command = "th run_model.lua -input_dir ../ImageCaptionGeneration/densecap_images -output_vis_dir ../ImageCaptionGeneration/results -output_dir ../ImageCaptionGeneration/results/boxes -gpu -1"
+    dense_command = "th run_model.lua -input_dir ../ImageCaptionGeneration/densecap_images -output_vis_dir ../ImageCaptionGeneration/results -max_images 80000 -output_dir ../ImageCaptionGeneration/results/boxes -gpu -1"
     subprocess.call(dense_command, shell=True)
     os.chdir("../ImageCaptionGeneration")
 
@@ -236,7 +236,9 @@ def extract_flat_phrase_vectors(phrase_count, phraseLength, imgCount, phraseCap,
 def extract_phrase_id_vectors(phrase_count, phraseLength, imgCount, phraseCap, image_props, invertDict):
     id_list = []
     img_ids = sorted(phraseCap.keys())
+    code.interact(local=dict(globals(), **locals()))
     for x in range(0, imgCount):
+        print x
         salient = salience.salient_phrases(image_props, phraseCap[img_ids[x]], 
                 lambda: salience.k_top_scores(image_props[phraseCap[img_ids[x]]], phrase_count))
         for phrase in salient:

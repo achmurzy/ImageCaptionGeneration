@@ -49,7 +49,7 @@ else:
     #we can input to our RNN
 
     ##########MS-COCO TRAINING CAPTION EXTRACTION##############
-    inputImgCount = 10
+    inputImgCount = 1000
 
     #get three img IDs from MS-COCO
     imgIDs = dp.get_coco_imgs(inputImgCount)
@@ -96,6 +96,7 @@ else:
         if name in imgFiles.values():
             phraseCapCorrespondence[invertFiles[name]] = x
 
+    code.interact(local=dict(globals(), **locals()))
     # Network Parameters 
     n_hidden = 64 # hidden layer num of features (# of 'neurons')
     n_layers = 1 # number of stacked layers - should equal number of phrases (so batch size?)
@@ -104,7 +105,7 @@ else:
 
     # Input Parameters
     batch_size = 2 # of images to show per training iteration
-    phraseCount = 1 # of densecap phrases to use in tensor input per epoch
+    phraseCount = 2 # of densecap phrases to use in tensor input per epoch
     phraseLength = 5 # of words per phrase. This will become a function of phrase inputs
     LEX_DIM = (len(wordDict))
     num_epochs = 100
@@ -160,7 +161,7 @@ else:
 '''captions = dp.extract_caption_vectors(phraseLength, inputImgCount, invertDict, captions)
     phrases = dp.extract_phrase_vectors(
         phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
-    code.interact(local=dict(globals(), **locals()))
+    
     flatPhrases = phrases
     flatCaptions = flatten(captions)
     flatCaptions = flatten(flatCaptions)
