@@ -8,14 +8,14 @@ import densecap_processing as dp
 import reader
 
 import tensorflow as tf
-from tensorflow.python.ops import rnn, rnn_cell
+from tensorflow.python.ops import rnn, rnn_cell, seq2seq
 from tensorflow.contrib.slim.python.slim import evaluation
+from tensorflow.contrib import grid_rnn
 
 import numpy as np
-#from nltk import bleu_score
-import code
 import matplotlib.pyplot as plt
 
+import code
 
 # To make input, we need to create a tensor
 # Our tensor will include:
@@ -43,8 +43,6 @@ class NetworkInput(object):
         self.phrase_count = phraseCount
         self.phrase_dimension = phraseDim
         self.word_dimension = wordDim
-        #self.inputs = [np.asarray(inputs[0], dtype=np.float32), 
-        #               np.asarray(inputs[1], dtype=np.float32)] 
         self.batch_size = batchSize
         self.num_epochs = numEpochs
         self.epoch_size = epochSize
@@ -77,6 +75,30 @@ class NetworkResults(object):
         plt.tick_params(axis='both', which='minor', labelsize=8)
         plt.show()
         
+class PhraseLSTMCell(rnn_cell.LSTMCell):
+
+    @property
+    def state_size(self):
+        return (self._state_size)
+
+    @property 
+    def output_size(self):
+        return (self._output_size)
+
+    def __init__(self, dims):
+        self._dims = dims
+        self._output_size = tf.TensorShape(self._dims)
+        self._state_size = (tf.TensorShape(self._dims, tf.TensorShape(self._dims)))
+        super(self, num_units, input_size=None,
+               use_peepholes=False, cell_clip=None,
+               initializer=None, num_proj=None, proj_clip=None,
+               num_unit_shards=1, num_proj_shards=1,
+               forget_bias=1.0, state_is_tuple=True,
+              activation=tanh)
+
+    def __call__(self, input_, state, scope=None):
+        h, c = state
+        return (input_ + 1, (h + 1, c + 1))
 
 class LSTMNet(object):
 
@@ -188,7 +210,7 @@ class LSTMNet(object):
                             [inputs.word_dimension, params.layer_size], dtype=params.data_type)
 
                     phraseEmbedding = tf.nn.embedding_lookup(embedding, self._x)
-                code.interact(local=dict(globals(), **locals()))
+
                 phraseEmbedding = [tf.squeeze(input_step, [1])
                     for input_step in tf.split(1, inputs.phrase_dimension, phraseEmbedding)]
             
@@ -203,31 +225,34 @@ class LSTMNet(object):
                 tf.random_normal([inputs.word_dimension, params.layer_size]))
             hidden_input = tf.matmul(self._x, hidden_weights)
             
-            phraseEmbedding = [tf.squeeze(input_step, [1])
+            phraseEming = [tf.squeeze(input_step, [1])
                                for input_step in tf.split(
                                        1, inputs.phrase_dimension, hidden_input)]'''
             
             # Define an lstm cell with tensorflow
-            lstm_cell = rnn_cell.BasicLSTMCell(
+            lstm_cell = rnn_cell.LSTMCell(
                 params.layer_size, forget_bias=1.0, state_is_tuple=True)
+            
+            #grid_cell = grid_rnn.Grid3LSTMCell(
+            #    params.layer_size, forget_bias=1.0)
+
+            #our_cell = PhraseLSTMCell(
+            #    params.layer_size, forget_bias=1.0)
+
             layer_cell = rnn_cell.MultiRNNCell(
                 [lstm_cell] * params.num_layers, state_is_tuple=True)
 
-            #self._initial_state = layer_cell.zero_state(
-            #        inputs.word_dimension, params.data_type)
+            self._initial_state = layer_cell.zero_state(
+                    inputs.phrase_count, params.data_type)
             #self._initial_state = layer_cell.zero_state(
             #        inputs.batch_size * inputs.word_dimension, params.data_type)
-            self._initial_state = layer_cell.zero_state(
-                    inputs.batch_size, params.data_type)
+            #self._initial_state = layer_cell.zero_state(
+            #        inputs.batch_size, params.data_type)
 
-            code.interact(local=dict(globals(), **locals()))
-            outputs, state = rnn.rnn(
-                layer_cell, phraseEmbedding, 
+            outputs, state = rnn.rnn(layer_cell, phraseEmbedding, 
                 initial_state = self._initial_state, dtype=params.data_type)
 
-            #outputs, state = rnn.rnn(
-             #   layer_cell, phraseEmbedding, 
-              #    dtype=params.data_type)
+            #outputs, state = seq2seq.rnn_decoder(phraseEmbedding, self._initial_state, layer_cell)
             
             code.interact(local=dict(globals(), **locals()))
             #Concatenate MultiRNN output states to create Output layer
@@ -251,24 +276,44 @@ class LSTMNet(object):
                     
                     #self._model = tf.reshape(prod, 
                     #[inputs.batch_size, inputs.phrase_dimension, inputs.word_dimension]) + biases 
+                    #Slice the preferred phrase by aggregating by argmax along the phrase_count
+                    #dimension for comparison to caption
+                    code.interact(local=dict(globals(), **locals()))
                     
+                    phraseAgg = tf.reshape(self._model, 
+                [inputs.phrase_count, inputs.phrase_dimension, inputs.word_dimension])
+                    
+                    mul_agg = tf.ones([inputs.phrase_dimension, inputs.word_dimension])
+                    
+                    for i in xrange(inputs.phrase_count): 
+                        tens = tf.slice(phraseAgg, [i, 0, 0], 
+                                            [1, inputs.phrase_dimension, inputs.word_dimension])
+                        mul_agg = tf.mul(mul_agg, tf.squeeze(tens, [0]))
+                    
+                    logits = [mul_agg]
+
                     #self.probabilities is the final layer of the network
                     #squash all predictions into range 0->1 for sane inference 
-                    self._probs = tf.nn.softmax(self._model)
+                    self._probs = tf.nn.softmax(mul_agg
+)
+                    code.interact(local=dict(globals(), **locals()))
 
                 with tf.variable_scope("Backpropagation"):
                     #self._cost = tf.reduce_mean(
                     #    tf.nn.softmax_cross_entropy_with_logits(self._model, self._y))
+
+                    code.interact(local=dict(globals(), **locals()))
+
                     
-                    logits = [self._model]
                     targets = [tf.reshape(self._y, [-1])]
-                    weights = [tf.ones([inputs.batch_size * inputs.phrase_dimension], 
+                    weights = [tf.ones([inputs.phrase_dimension], 
                          dtype=params.data_type)]
 
                     self._cost = tf.reduce_mean(
-                        tf.nn.seq2seq.sequence_loss(logits,targets,weights)) / inputs.batch_size
+                        tf.nn.seq2seq.sequence_loss(logits,targets,weights)) 
+                    #/ inputs.phrase_count
                     
-                    code.interact(local=dict(globals(), **locals()))
+                    
                     #I don't know what this does. Some variant of backpropagation
                     self.globalStep = tf.Variable(0, name='global_step', trainable=False)
                     self._optimizer = tf.train.AdamOptimizer(
@@ -287,7 +332,7 @@ class LSTMNet(object):
             session.run(initializer)
             while self.epochs <= self.inputs.num_epochs:
                 self.run_epoch(session)
-                #print(self.sample(session))  # -- get caption
+                print(self.sample(session))  # -- get caption
         self.results.plot_results()
 
     def run_epoch(self, session):
@@ -321,21 +366,21 @@ class LSTMNet(object):
         ret = seed
         char = ret
 
-        x = np.zeros((self.inputs.phrase_dimension, self.inputs.word_dimension))
-        #x[0, 0] = self.encoder[char]
+        x = np.zeros((self.inputs.phrase_count, self.inputs.phrase_dimension))
+        x[0, 0] = self.encoder[char]
         #code.interact(local=dict(globals(), **locals()))
-        #feed = {self._x: x, self.initial_state:state}
-        #[state] = session.run([self.final_state], feed)
+        feed = {self._x: x, self.initial_state:state}
+        [state] = session.run([self.final_state], feed)
 
         #Seed state is trained network on <START> = '\''
         num = self.inputs.phrase_dimension #For now, fixed length captions
         for n in range(num):              #Ideally this loop is 'until generate <STOP>'
-            x = np.zeros((self.inputs.phrase_dimension, self.inputs.word_dimension))
-            #x[0, 0] = self.encoder[char]
+            x = np.zeros((self.inputs.phrase_count, self.inputs.phrase_dimension))
+            x[0, 0] = self.encoder[char]
             feed = {self._x: x, self.initial_state:state}
 
             [probs, state] = session.run([self.probabilities, self.final_state], feed)
-            p = probs[n]                #We only sample the next word in the sequence   
+            p = probs[0]                #We only sample the next word in the sequence   
             sample = np.argmax(p)          #We can write more complicated sampling functions
             pred = self.decoder[sample]
             ret += pred

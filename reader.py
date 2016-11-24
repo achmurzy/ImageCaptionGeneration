@@ -154,10 +154,15 @@ def ptb_id_producer(raw_phrase_data, raw_caption_data, batch_size, phrase_count,
     raw_phrase_data = tf.convert_to_tensor(raw_phrase_data, name="raw_data", dtype=tf.int32)
     data_len = tf.size(raw_phrase_data)
 
-    batch_len = (batch_size * phrase_count * phrase_length)
+    batch_len = (phrase_count * phrase_length)
+    #batch_len = (batch_size * phrase_length)
     epoch_size = (data_len) // (batch_len)
+    
+    #data = tf.reshape(raw_phrase_data[0 : epoch_size * batch_len],
+    #                  [batch_size * epoch_size, phrase_length])
+
     data = tf.reshape(raw_phrase_data[0 : epoch_size * batch_len],
-                      [batch_size * epoch_size, phrase_count, phrase_length])
+                      [phrase_count * epoch_size, phrase_length])
     
     assertion = tf.assert_positive(
         epoch_size,
@@ -167,18 +172,25 @@ def ptb_id_producer(raw_phrase_data, raw_caption_data, batch_size, phrase_count,
 
     raw_caption_data = tf.convert_to_tensor(raw_caption_data, name="raw_captions", dtype=tf.int32)
     caption_data_len = tf.size(raw_caption_data)
+    
+    caption_batch_len = phrase_length
+    
+    #caption_data = tf.reshape(raw_caption_data[0: epoch_size * batch_len],
+    #                          [batch_size * epoch_size, phrase_length])
 
-    caption_data = tf.reshape(raw_caption_data[0: epoch_size * batch_len],
-                              [batch_size * epoch_size, phrase_count, phrase_length])
-               
+    caption_data = tf.reshape(raw_caption_data[0: epoch_size * caption_batch_len],
+                              [epoch_size, phrase_length])
                
     #Iteratively dequeues integers in the range of iterations of an epoch 
     epoch_queue = tf.train.range_input_producer(epoch_size, shuffle=False)
     i = epoch_queue.dequeue()
 
     #Accesses data by slicing with the asynchronously updated epoch index
-    x = tf.slice(data, [i*batch_size, 0], [batch_size, phrase_count, phrase_length])
-    y = tf.slice(caption_data, [i*batch_size, 0], [batch_size, phrase_count, phrase_length])
+    x = tf.slice(data, [i*phrase_count, 0], [phrase_count, phrase_length])
+    y = tf.slice(caption_data, [i, 0], [1, phrase_length])
+
+    #x = tf.slice(data, [i*batch_size, 0], [batch_size, phrase_length])
+    #y = tf.slice(caption_data, [i*batch_size, 0], [batch_size, phrase_length])
 
     print ("At reader")
     code.interact(local=dict(globals(), **locals()))

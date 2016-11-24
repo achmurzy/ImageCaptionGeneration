@@ -74,7 +74,7 @@ for x in image_props.keys():
 '''captions = dp.extract_caption_vectors(phraseLength, inputImgCount, invertDict, captions)
 phrases = dp.extract_phrase_vectors(
     phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
-code.interact(local=dict(globals(), **locals()))
+
 flatPhrases = phrases
 flatCaptions = flatten(captions)
 flatCaptions = flatten(flatCaptions)
@@ -87,11 +87,13 @@ flatCaptions = dp.extract_flat_caption_vectors(phraseLength, inputImgCount, inve
 flatPhraseIDs = dp.extract_phrase_id_vectors(phraseCount, phraseLength, inputImgCount, phraseCapCorrespondence, image_props, invertDict)
 flatCaptionIDs = dp.extract_caption_id_vectors(phraseLength, inputImgCount, invertDict, captions)
 
+code.interact(local=dict(globals(), **locals()))
+
 import reader
 #batchedPhrases, batchedCaptions, epochSize = reader.ptb_producer(
 #flatPhrases, flatCaptions, batch_size, phraseCount, phraseLength, LEX_DIM)
 batchedPhrases, batchedCaptions, epochSize = reader.ptb_id_producer(
-flatPhraseIDs, flatCaptionIDs, batch_size, phraseLength)
+flatPhraseIDs, flatCaptionIDs, batch_size, phraseCount, phraseLength)
 
 #inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, [phrases, captions], num_epochs)
 inputs = rn.NetworkInput(batch_size, phraseCount, phraseLength, LEX_DIM, batchedPhrases, batchedCaptions, num_epochs, epochSize)
