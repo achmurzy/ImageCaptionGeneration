@@ -49,7 +49,7 @@ else:
     #we can input to our RNN
 
     ##########MS-COCO TRAINING CAPTION EXTRACTION##############
-    inputImgCount = 1000
+    inputImgCount = 10000
 
     #get three img IDs from MS-COCO
     imgIDs = dp.get_coco_imgs(inputImgCount)
