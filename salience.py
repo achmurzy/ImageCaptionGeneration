@@ -1,5 +1,60 @@
 import densecap_processing as dp
 
+import nltk
+import sys
+from nltk.collocations import *
+import os
+
+def getTopPhrases(n, phrases):
+
+    try:
+        important_phrases = {};
+
+        #create input file with each phrase on a single line
+        input_file = open('input', 'w')
+        for phrase in phrases:
+            input_file.write("%s\n" % phrase)
+        input_file.close()
+        ##################### Using Bigrams #########################
+        bigram_measures = nltk.collocations.BigramAssocMeasures()
+        # get current working directory
+        cwd = os.getcwd()
+        finder = BigramCollocationFinder.from_words(nltk.corpus.genesis.words(cwd + '/input'))
+        # only bigrams that appear 3+ times
+        finder.apply_freq_filter(3)
+        # return the 'n' 3-grams with the highest PMI
+        top_bigrams = finder.nbest(bigram_measures.pmi, n+30)
+
+        ##################### Using Trigrams #########################
+        # trigram_measures = nltk.collocations.TrigramAssocMeasures()
+        # # get current working directory
+        # cwd = os.getcwd()
+        # finder = TrigramCollocationFinder.from_words(nltk.corpus.genesis.words(cwd + '/input'))
+        # finder.apply_freq_filter(3)
+        # top_bigrams = finder.nbest(trigram_measures.pmi, n + 30)
+
+    except:
+        print "Unexpected error:", sys.exc_info()[0]
+        raise
+
+    for item in top_bigrams:
+        try:
+            search_string = ' '.join(item);
+            # combine bigram/trigram with score from densecap
+            for phrase in phrases:
+                if search_string in phrase and phrase not in important_phrases:
+                    important_phrases[phrase] =  True
+                    break;
+            if len(important_phrases) == n:
+                return important_phrases.keys()
+        except:
+            print 'No problem, keep trying'
+    # if keys are less than 'n', then make sure that it has 'n' keys
+    keys = important_phrases.keys()
+    for i in range(0, n - len(keys)):
+        keys.append("");
+    return keys
+
 #Takes a saliency function to return training phrases for a given image
 #Our network architecture may not require a fixed number of target phrases
 def salient_phrases(images, index, saliency):
