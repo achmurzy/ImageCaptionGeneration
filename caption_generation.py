@@ -42,7 +42,7 @@ dp.build_lookup_lexicon(lex, wordDict, invertDict)
 ###########DENSECAP PHRASE EXTRACTION######################
 
 if(processImages):
-    dp.coco_to_densecap(imgIDs)
+    dp.coco_to_densecap(imgIDs, train)
 
 ###########NETWORK CONSTRUCTION AND EXECUTION################
 

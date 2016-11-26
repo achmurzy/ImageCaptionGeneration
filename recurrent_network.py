@@ -166,6 +166,10 @@ class LSTMNet(object):
     def encoder(self):
         return self._encoder
 
+    @property
+    def supervisor(self):
+        return self._supervisor
+
     #@property 
     #def training_iterations(self):
     #    return self.inputs.data_size / self.inputs.batch_size
@@ -173,7 +177,27 @@ class LSTMNet(object):
         return self.inputs.epoch_size.eval(session=session)
 
     def __init__(self, inputs, params, results, codex, train):
-        with tf.variable_scope("Model", reuse = not train):
+        #initializer = tf.random_normal_initializer(-params.init_scale, params.init_scale)
+        initializer = tf.initialize_all_variables()
+        #saves = tf.train.Saver(write_version=tf.train.SaverDef.V2) saver=saves,
+        if train:
+            self.build_network(inputs, params, results, codex, initializer, train)
+            self._supervisor = tf.train.Supervisor(logdir=self.log_path, 
+                                 global_step=self.global_step, save_model_secs=1)
+            with self.supervisor.managed_session() as session:
+                session.run(initializer)
+                self.run_network(session)
+        else:
+            self.build_network(inputs, params, results, codex, initializer, train)
+            self._supervisor = tf.train.Supervisor(logdir=self.log_path)
+            code.interact(local=dict(globals(), **locals()))
+            with self.supervisor.managed_session() as session:
+                #saves.restore(session)
+                self.run_network(session)
+        
+
+    def build_network(self, inputs, params, results, codex, init, train):
+        with tf.variable_scope("Model"):
             
             #Add network parameters objects
             self._input = inputs
@@ -230,9 +254,15 @@ class LSTMNet(object):
                     # Randomly initializing weights and biases ensures feature differentiation
                     #weights = tf.Variable(tf.random_normal([params.layer_size, 1]))
 
-                    weights = tf.Variable(tf.random_normal(
-                        [params.layer_size, inputs.word_dimension]))
-                    biases = tf.Variable(tf.random_normal([inputs.word_dimension]))
+                    #weights = tf.get_variable("Aggregation weights", tf.random_normal(
+                    #    [params.layer_size, inputs.word_dimension]))
+                    #biases = tf.get_variable("Aggregation biases", 
+                    #                         tf.random_normal([inputs.word_dimension]))
+
+                    weights = tf.get_variable("Aggregation_w",
+                            [params.layer_size, inputs.word_dimension], dtype = params.data_type)
+                    biases = tf.get_variable("Aggregation_b", 
+                                             [inputs.word_dimension], dtype = params.data_type)
 
                     self._model = tf.matmul(output, weights) + biases
 
@@ -268,19 +298,10 @@ class LSTMNet(object):
                         learning_rate=params.learning_rate).minimize(
                             self._cost, global_step=self.globalStep)
 
-    def run_network(self, train):
-        initializer = tf.initialize_all_variables()
-        saves = tf.train.Saver(write_version=tf.train.SaverDef.V2)
-        if train:
-            sv = tf.train.Supervisor(logdir=self.log_path, saver=saves, 
-                                 global_step=self.global_step, save_model_secs=1)
-        else:
-            sv = tf.train.Supervisor()
-        with sv.managed_session() as session:
-            session.run(initializer)
-            while self.epochs <= self.inputs.num_epochs:
-                self.run_epoch(session)
-                #print(self.sample(session))  # -- get caption
+    def run_network(self, session):
+        while self.epochs <= self.inputs.num_epochs:
+            self.run_epoch(session)
+            #print(self.sample(session))  # -- get caption
         self.results.plot_results()
 
     def run_epoch(self, session):
@@ -297,7 +318,6 @@ class LSTMNet(object):
             for i, (c, h) in enumerate(self.initial_state):  
                 train_dict[c] = state[i].c
                 train_dict[h] = state[i].h
-            #code.interact(local=dict(globals(), **locals()))
             
             vals = session.run(fetches, train_dict)
              

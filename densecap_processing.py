@@ -28,7 +28,7 @@ def set_coco_dataset(train):
     if train:
         annFile = 'annotations/captions_train2014.json'
     else:
-        annFile = 'annotations/image_info_test2014.json'
+        annFile = 'annotations/captions_val2014.json'
     coco = COCO(annFile)
 
 #Get some number of imgIDs from MS-COCO
@@ -86,7 +86,7 @@ def coco_to_densecap(imgIDs, train):
         if train:
             command = 'cp images/COCO_train2014_%s.jpg densecap_images'%(str(x).zfill(12))
         else:
-            command = 'cp images/COCO_test2014_%s.jpg densecap_images'%(str(x).zfill(12))
+            command = 'cp images/COCO_val2014_%s.jpg densecap_images'%(str(x).zfill(12))
         print str(x) + " Executing: "+ command
         subprocess.call(command, shell=True)
     os.chdir("../densecap")
