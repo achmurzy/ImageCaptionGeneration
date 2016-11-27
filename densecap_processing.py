@@ -88,17 +88,7 @@ def save_full_coco_lexicon(imgCount):
     iDict = {}
     build_lookup_lexicon(sorted(set(words)), wDict, iDict)
 
-    import pickle
-    
-    encoder = open("encoder", 'w')
-    renc = wDict
-    pickle.dump(renc, encoder)
-    encoder.close()
-    
-    decoder = open("decoder", 'w')
-    rdec = iDict
-    pickle.dump(rdec, decoder)
-    decoder.close()
+    return wDict, iDict
 
 ################################# DENSECAP PROCESSING ###########################################
 #Still assumes densecap is in the folder next to ImageCaptionGeneration
