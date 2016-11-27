@@ -62,6 +62,44 @@ def get_coco_lexicon(_captions):
             words.append(word)
     return sorted(set(words))
 
+def save_full_coco_lexicon(imgCount):
+    global coco
+
+    annFile = 'annotations/captions_train2014.json'
+    coco = COCO(annFile)
+    IDs = get_coco_imgs(imgCount)
+    caps_train = coco_to_captions(IDs)
+    
+    annFile = 'annotations/captions_val2014.json'
+    coco = COCO(annFile)
+    IDs = get_coco_imgs(imgCount)
+    caps_val = coco_to_captions(IDs)
+
+    caps_train.extend(caps_val)
+
+    words = []
+    for x in caps_train:
+        print x
+        for word in re.split('[(\'\.)\s,]', x['caption']):
+            words.append(word)
+
+    print words
+    wDict = {}
+    iDict = {}
+    build_lookup_lexicon(sorted(set(words)), wDict, iDict)
+
+    import pickle
+    
+    encoder = open("encoder", 'w')
+    renc = wDict
+    pickle.dump(renc, encoder)
+    encoder.close()
+    
+    decoder = open("decoder", 'w')
+    rdec = iDict
+    pickle.dump(rdec, decoder)
+    decoder.close()
+
 ################################# DENSECAP PROCESSING ###########################################
 #Still assumes densecap is in the folder next to ImageCaptionGeneration
 #/densecap

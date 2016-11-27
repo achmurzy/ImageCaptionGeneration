@@ -186,14 +186,14 @@ class LSTMNet(object):
                                  global_step=self.global_step, save_model_secs=1)
             with self.supervisor.managed_session() as session:
                 session.run(initializer)
-                self.run_network(session)
+                self.train_network(session)
         else:
             self.build_network(inputs, params, results, codex, initializer, train)
             self._supervisor = tf.train.Supervisor(logdir=self.log_path)
             code.interact(local=dict(globals(), **locals()))
             with self.supervisor.managed_session() as session:
                 #saves.restore(session)
-                self.run_network(session)
+                self.test_network(session)
         
 
     def build_network(self, inputs, params, results, codex, init, train):
@@ -286,6 +286,7 @@ class LSTMNet(object):
                         tf.nn.seq2seq.sequence_loss(logits,targets,weights)) 
 
                 if not train:
+                    self._optimizer = None
                     return 
 
                 with tf.variable_scope("Backpropagation"):
@@ -298,11 +299,14 @@ class LSTMNet(object):
                         learning_rate=params.learning_rate).minimize(
                             self._cost, global_step=self.globalStep)
 
-    def run_network(self, session):
+    def train_network(self, session):
         while self.epochs <= self.inputs.num_epochs:
             self.run_epoch(session)
-            #print(self.sample(session))  # -- get caption
+            print(self.sample(session))  # -- get caption
         self.results.plot_results()
+
+    def test_network(self, session):
+        self.run_epoch(session)
 
     def run_epoch(self, session):
         """Runs the model on the given data."""
